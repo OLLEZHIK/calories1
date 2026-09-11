@@ -58,6 +58,14 @@ class TeamLeadAgent:
 
         text_lower = raw_text.lower().strip()
 
+        # Guard: reject UI button texts that must never reach the food pipeline
+        NON_FOOD_UI_TEXTS = [
+            "запись приема пищи", "технический таск",
+            "итоги за сегодня", "советы ии-тренера"
+        ]
+        if any(text_lower == t for t in NON_FOOD_UI_TEXTS):
+            return "👇 Нажмите одну из кнопок ниже чтобы начать."
+
         # 1. Check if user is logging a product price (e.g., 'творог 200г 120р' or '500г макарон стоят 1.5€')
         price_info = ingestion_agent.parse_price_entry(raw_text)
         if price_info:

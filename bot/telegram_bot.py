@@ -78,16 +78,34 @@ def start_bot():
             body = "\n\n".join(lines) if lines else "💡 Советы формируются на основе вашего ежедневного рациона."
             await update.message.reply_markdown(body + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)", reply_markup=main_keyboard)
 
+        # All button texts — used to guard against accidental food processing
+        BUTTON_TEXTS = {
+            "🍲 Запись приема пищи", "👨‍💼 Технический таск",
+            "📊 Итоги за сегодня", "💡 Советы ИИ-тренера"
+        }
+
         async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            text = update.message.text
-            if text in ["🍲 Запись приема пищи", "/food"]:
-                await update.message.reply_markdown("🍲 **Режим записи приема пищи**\n\nНапишите или надиктуйте голосом вашу еду (например: *'3 яйца, 80г макарон, 20г бекона'*).", reply_markup=main_keyboard)
-            elif text in ["👨‍💼 Технический таск", "/task"]:
-                await update.message.reply_markdown("👨‍💼 **Режим технической задачи Тимлиду**\n\nОпишите задачу или желаемую фичу (например: *'Добавь на дашборд показатель веса 74 кг и роста 175 см'*).", reply_markup=main_keyboard)
-            elif text in ["📊 Итоги за сегодня", "/summary"]:
+            text = (update.message.text or "").strip()
+
+            if text in ("🍲 Запись приема пищи", "/food"):
+                await update.message.reply_markdown(
+                    "🍲 **Режим записи приема пищи**\n\n"
+                    "Напишите или надиктуйте голосом вашу еду (например: *'3 яйца, 80г макарон, 20г бекона'*).",
+                    reply_markup=main_keyboard
+                )
+            elif text in ("👨‍💼 Технический таск", "/task"):
+                await update.message.reply_markdown(
+                    "👨‍💼 **Режим технической задачи Тимлиду**\n\n"
+                    "Опишите задачу или желаемую фичу (например: *'Добавь на дашборд показатель веса 74 кг и роста 175 см'*).",
+                    reply_markup=main_keyboard
+                )
+            elif text in ("📊 Итоги за сегодня", "/summary"):
                 await summary_command(update, context)
-            elif text in ["💡 Советы ИИ-тренера", "/coach"]:
+            elif text in ("💡 Советы ИИ-тренера", "/coach"):
                 await coach_command(update, context)
+            elif text in BUTTON_TEXTS:
+                # Safety catch: any other button text must NEVER reach food pipeline
+                await update.message.reply_markdown("👇 Выберите действие с помощью кнопок ниже.", reply_markup=main_keyboard)
             else:
                 response = process_user_meal_input(text, input_type="text")
                 await update.message.reply_markdown(response, reply_markup=main_keyboard)

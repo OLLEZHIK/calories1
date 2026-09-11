@@ -3,7 +3,7 @@ import json
 import urllib.request
 import urllib.error
 from typing import List, Dict, Any, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from config import DB_PATH, SUPABASE_URL, SUPABASE_KEY, USE_SUPABASE, DEFAULT_GOALS
 from pathlib import Path
 
@@ -110,9 +110,10 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
     # Query Supabase Cloud DB if configured
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            # Filter by date directly in the Supabase query to avoid fetching all records
+            # Use next-day boundary for reliable range filtering in PostgREST
+            next_date = (date.fromisoformat(target_date) + timedelta(days=1)).isoformat()
             sp_meals = supabase_request(
-                f"meals?select=*,meal_items(*)&timestamp=gte.{target_date}T00:00:00&timestamp=lt.{target_date}T23:59:59"
+                f"meals?select=*,meal_items(*)&timestamp=gte.{target_date}&timestamp=lt.{next_date}"
             )
             if sp_meals is not None and isinstance(sp_meals, list):
                 tot_cal = 0.0
@@ -136,7 +137,7 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
                     "goals": DEFAULT_GOALS
                 }
         except Exception as e:
-            print(f"Supabase summary warning: {e}")
+            print(f"Supabase summary error: {e}")
 
     with get_connection() as conn:
         cursor = conn.cursor()
