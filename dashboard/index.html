@@ -104,6 +104,12 @@ a{color:inherit}
   .panel-body{padding:14px 12px}
 }
 
+/* ---------- weight bar ---------- */
+.weight-wrap{margin-bottom:20px; padding:16px; background:var(--panel); border:1px solid var(--hair); border-radius:4px; box-shadow:var(--shadow);}
+.wb-labels{display:flex; justify-content:space-between; margin-bottom:8px; font-size:14px; font-weight:600;}
+.wb-track{width:100%; height:12px; background:var(--track); border-radius:6px; overflow:hidden;}
+.wb-fill{height:100%; background:var(--p); border-radius:6px; transition:width 0.3s ease;}
+
 /* ---------- calorie dial ---------- */
 .dial-wrap{display:flex; align-items:center; gap:22px; flex-wrap:wrap}
 @media (max-width:540px){
@@ -176,6 +182,14 @@ a{color:inherit}
 .sect{margin-top:32px}
 .sect-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-bottom:8px}
 .sect-head h2{font-size:18px; text-transform:uppercase}
+
+.coach-msg{background:var(--warn-bg); padding:16px; border-radius:4px; margin-top:12px; border-left:4px solid var(--warn);}
+.coach-msg h3{margin-bottom:8px; color:var(--warn); font-size:15px; margin-top:0;}
+.coach-msg p{margin:0 0 8px 0;}
+
+.product-card{background:var(--panel); padding:12px; border:1px solid var(--hair); border-radius:4px; font-size:13px;}
+.product-card strong{display:block; margin-bottom:4px; font-size:14px; text-transform:capitalize;}
+.product-card .price{color:var(--good); font-weight:600;}
 </style>
 </head>
 <body>
@@ -203,6 +217,17 @@ a{color:inherit}
     <!-- Populated by JS -->
   </div>
 
+  <!-- Weight Bar -->
+  <div class="weight-wrap" id="weight-bar-wrap" style="display:none;">
+    <div class="wb-labels">
+      <span>Текущий вес: <span id="wb-current" style="color:var(--p)">0</span>кг</span>
+      <span>Цель: <span id="wb-goal">0</span>кг</span>
+    </div>
+    <div class="wb-track">
+      <div class="wb-fill" id="wb-fill" style="width: 0%"></div>
+    </div>
+  </div>
+
   <div class="grid-top">
     <!-- Day Summary -->
     <section class="panel">
@@ -226,7 +251,6 @@ a{color:inherit}
           <div class="dial-meta">
             <span class="pill good" id="status-pill"><i class="sq" style="background:var(--good)"></i><span id="pill-text">В норме</span></span>
             <dl class="kv">
-              <dt>Вес:</dt><dd id="kv-weight">80кг (Цель: 75кг)</dd>
               <dt>Осталось:</dt><dd id="kv-left">2200 ккал</dd>
               <dt>Активность:</dt><dd id="kv-active" style="color:var(--f)">0 ккал</dd>
               <dt>Белки:</dt><dd id="kv-p">0g / 160g</dd>
@@ -325,6 +349,25 @@ a{color:inherit}
     </div>
   </div>
 
+  <!-- Coach Advice -->
+  <div class="sect" id="sect-coach" style="display:none;">
+    <div class="sect-head">
+      <h2>Советы ИИ-Тренера</h2>
+    </div>
+    <hr class="rule-heavy">
+    <div id="coach-container"></div>
+  </div>
+
+  <!-- Product Prices -->
+  <div class="sect" id="sect-products" style="display:none;">
+    <div class="sect-head">
+      <h2>Цены на продукты</h2>
+    </div>
+    <hr class="rule-heavy">
+    <div id="products-container" style="margin-top:12px; display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px">
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -393,6 +436,8 @@ function updateUI(data) {
   const summary = data.summary || {};
   const goals = summary.goals || { calories: 2200, protein_g: 160, fat_g: 70, carbs_g: 230, weight_current: 80, weight_goal: 75 };
   const meals = data.meals || [];
+  const coach = data.coach || {};
+  const products = data.products || [];
   
   renderCalendarAndHistogram(data.history || {}, goals);
 
@@ -404,6 +449,25 @@ function updateUI(data) {
 
   document.getElementById('day-date').innerText = currentDate;
 
+  // Update Weight Bar
+  if (goals.weight_current && goals.weight_goal) {
+    document.getElementById('weight-bar-wrap').style.display = 'block';
+    document.getElementById('wb-current').innerText = goals.weight_current;
+    document.getElementById('wb-goal').innerText = goals.weight_goal;
+    
+    let diff = Math.abs(goals.weight_current - goals.weight_goal);
+    // For visual proportion, let's just assume starting distance was e.g. 10kg
+    // Or simpler: progress is 100% when diff = 0. If diff is 5, it's 50% (assuming 10kg to lose).
+    // To make it look dynamic without history:
+    let maxDiff = 10; // pretend starting weight was goal+10
+    let progress = Math.max(0, Math.min(1, 1 - (diff / maxDiff)));
+    document.getElementById('wb-fill').style.width = (progress * 100) + '%';
+    if (diff === 0) document.getElementById('wb-fill').style.background = 'var(--good)';
+    else document.getElementById('wb-fill').style.background = 'var(--p)';
+  } else {
+    document.getElementById('weight-bar-wrap').style.display = 'none';
+  }
+
   // Update Dial
   document.getElementById('dial-kcal').innerText = cal;
   document.getElementById('dial-target').innerText = goals.calories;
@@ -412,7 +476,6 @@ function updateUI(data) {
   document.getElementById('dial-circle').style.strokeDashoffset = circleOffset;
 
   // Update KV
-  document.getElementById('kv-weight').innerText = `${goals.weight_current}кг (Цель: ${goals.weight_goal}кг)`;
   document.getElementById('kv-left').innerText = `${Math.max(0, goals.calories - cal)} ккал`;
   document.getElementById('kv-active').innerText = `${activeCal} ккал`;
   document.getElementById('kv-p').innerText = `${p}g / ${goals.protein_g}g`;
@@ -464,6 +527,35 @@ function updateUI(data) {
   updateBlock('meal-lunch', blocks['Обед']);
   updateBlock('meal-dinner', blocks['Ужин']);
   updateBlock('meal-snack', blocks['Перекус']);
+
+  // Coach Update
+  const coachCont = document.getElementById('coach-container');
+  if (coach && coach.recommendations && coach.recommendations.length > 0) {
+    document.getElementById('sect-coach').style.display = 'block';
+    coachCont.innerHTML = coach.recommendations.map(r => `
+      <div class="coach-msg" style="border-color:var(--${r.severity === 'warning' ? 'crit' : 'warn'})">
+        <h3 style="color:var(--${r.severity === 'warning' ? 'crit' : 'warn'})">💡 ${escapeHtml(r.topic)}</h3>
+        <p>${escapeHtml(r.message)}</p>
+      </div>
+    `).join('');
+  } else {
+    document.getElementById('sect-coach').style.display = 'none';
+  }
+
+  // Products Update
+  const prodCont = document.getElementById('products-container');
+  if (products && products.length > 0) {
+    document.getElementById('sect-products').style.display = 'block';
+    prodCont.innerHTML = products.map(p => `
+      <div class="product-card">
+        <strong>${escapeHtml(p.product_name)}</strong>
+        <div class="price">${Math.round(p.price_per_100g)} ${escapeHtml(p.currency || 'руб')}/100г</div>
+        <div style="color:var(--ink-3); margin-top:4px;">Б:${Math.round(p.protein_per_100g||0)} Ж:${Math.round(p.fat_per_100g||0)} У:${Math.round(p.carbs_per_100g||0)}</div>
+      </div>
+    `).join('');
+  } else {
+    document.getElementById('sect-products').style.display = 'none';
+  }
 }
 
 function escapeHtml(str) { return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
