@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Databases & Environment
+calories.db
+.env
+*.log
+
+# IDE & System
+.vscode/
+.idea/
+.DS_Store
