@@ -47,7 +47,7 @@ class AudioTranscriptionAgent:
                 payload = b"\r\n".join(body)
                 headers = {
                     "Authorization": f"Bearer {speech_key}",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CaloriesAI/1.0",
+                    "User-Agent": "curl/7.68.0",
                     "Content-Type": f"multipart/form-data; boundary={boundary}"
                 }
                 req = urllib.request.Request("https://api.groq.com/openai/v1/audio/transcriptions", data=payload, headers=headers, method="POST")

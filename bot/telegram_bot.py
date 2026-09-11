@@ -13,6 +13,7 @@ from agents.auditor_agent import auditor_agent
 from agents.economy_agent import economy_agent
 from agents.coach_agent import coach_agent
 from agents.dashboard_agent import dashboard_agent
+from agents.audio_agent import audio_agent
 from database.db import save_meal, get_today_summary
 
 logging.basicConfig(level=logging.INFO)
