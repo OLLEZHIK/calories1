@@ -1,8 +1,35 @@
 import sqlite3
+import json
+import urllib.request
+import urllib.error
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date
-from config import DB_PATH
+from config import DB_PATH, SUPABASE_URL, SUPABASE_KEY, USE_SUPABASE
 from pathlib import Path
+
+def supabase_request(endpoint: str, method: str = "GET", data: Optional[Dict[str, Any]] = None) -> Any:
+    """Executes HTTPS REST request to Supabase Database API."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return None
+
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{endpoint}"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
+
+    body_bytes = json.dumps(data).encode("utf-8") if data else None
+    req = urllib.request.Request(url, data=body_bytes, headers=headers, method=method)
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            resp_text = resp.read().decode("utf-8")
+            return json.loads(resp_text) if resp_text else []
+    except Exception as e:
+        print(f"Supabase API Request Error: {e}")
+        return None
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)

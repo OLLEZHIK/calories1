@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calories AI — Live Dashboard</title>
+    <title>Calories AI Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --bg-dark: #0f172a;
@@ -31,14 +30,6 @@
         header h1 { font-size: 1.8rem; font-weight: 700; background: linear-gradient(90deg, #38bdf8, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         header p { color: var(--text-muted); font-size: 0.9rem; margin-top: 4px; }
         
-        .status-badge {
-            display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
-            background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3);
-            color: var(--accent-green); border-radius: 20px; font-size: 0.8rem; margin-top: 8px;
-        }
-        .dot { width: 8px; height: 8px; background: var(--accent-green); border-radius: 50%; animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-
         .card {
             background: var(--card-bg);
             backdrop-filter: blur(12px);
@@ -75,9 +66,8 @@
 <body>
     <div class="container">
         <header>
-            <h1>Calories AI — Live Dashboard</h1>
-            <p>Динамический онлайн-трекер калорий & БЖУ</p>
-            <div class="status-badge"><div class="dot"></div> Live Dynamic Sync</div>
+            <h1>Calories AI Dashboard</h1>
+            <p>Мультиагентный счетчик калорий & БЖУ | 2026-09-11</p>
         </header>
 
         <!-- Dynamic Macro Stats -->
@@ -86,33 +76,33 @@
             <div class="grid-stats">
                 <div class="stat-box">
                     <div class="stat-lbl">Калории</div>
-                    <div class="stat-val" id="cal-val" style="color: var(--accent-cyan);">0 / 2200</div>
+                    <div class="stat-val" style="color: var(--accent-cyan);">3434.2 / 2200</div>
                     <div class="progress-bar-container">
-                        <div class="progress-fill" id="cal-bar" style="width: 0%; background: var(--accent-cyan);"></div>
+                        <div class="progress-fill" style="width: 100%; background: var(--accent-cyan);"></div>
                     </div>
                 </div>
 
                 <div class="stat-box">
                     <div class="stat-lbl">Белок</div>
-                    <div class="stat-val" id="prot-val" style="color: var(--accent-green);">0g / 160g</div>
+                    <div class="stat-val" style="color: var(--accent-green);">282.8g / 160g</div>
                     <div class="progress-bar-container">
-                        <div class="progress-fill" id="prot-bar" style="width: 0%; background: var(--accent-green);"></div>
+                        <div class="progress-fill" style="width: 100%; background: var(--accent-green);"></div>
                     </div>
                 </div>
 
                 <div class="stat-box">
                     <div class="stat-lbl">Жиры</div>
-                    <div class="stat-val" id="fat-val" style="color: var(--accent-orange);">0g / 70g</div>
+                    <div class="stat-val" style="color: var(--accent-orange);">114.4g / 70g</div>
                     <div class="progress-bar-container">
-                        <div class="progress-fill" id="fat-bar" style="width: 0%; background: var(--accent-orange);"></div>
+                        <div class="progress-fill" style="width: 100%; background: var(--accent-orange);"></div>
                     </div>
                 </div>
 
                 <div class="stat-box">
                     <div class="stat-lbl">Углеводы</div>
-                    <div class="stat-val" id="carb-val" style="color: var(--accent-purple);">0g / 230g</div>
+                    <div class="stat-val" style="color: var(--accent-purple);">335.8g / 230g</div>
                     <div class="progress-bar-container">
-                        <div class="progress-fill" id="carb-bar" style="width: 0%; background: var(--accent-purple);"></div>
+                        <div class="progress-fill" style="width: 100%; background: var(--accent-purple);"></div>
                     </div>
                 </div>
             </div>
@@ -121,70 +111,56 @@
         <!-- Coach Recommendations -->
         <div class="card">
             <h3 style="margin-bottom: 14px; font-size: 1rem; color: var(--accent-purple);">💡 Советы Личного Тренера (Coach Agent)</h3>
-            <div id="coach-list">
-                <div class="coach-box">
-                    <div class="coach-title"><span class="badge badge-info">INFO</span>Баланс питательных веществ</div>
-                    <div class="coach-desc">Анализируем ваши приемы пищи за сегодня...</div>
+            
+            <div class="coach-box">
+                <div class="coach-title">
+                    <span class="badge badge-info">INFO</span>
+                    Баланс
                 </div>
+                <div class="coach-desc">Рацион выглядит сбалансированным! Отличная работа по соблюдению норм БЖУ.</div>
             </div>
+            
+            <div class="coach-box">
+                <div class="coach-title">
+                    <span class="badge badge-warning">WARNING</span>
+                    Качество жиров
+                </div>
+                <div class="coach-desc">Замечено высокое потребление жиров из майонеза (40.2г жира). Попробуйте заменить майонез на 10-15% сметану, греческий йогурт или авокадо.</div>
+            </div>
+            
+            <div class="coach-box">
+                <div class="coach-title">
+                    <span class="badge badge-warning">WARNING</span>
+                    Избыток жиров
+                </div>
+                <div class="coach-desc">Превышена дневная норма жиров (114.4г из 70г). Рекомендуется снизить растительное масло и жирные соусы в вечернем приеме пищи.</div>
+            </div>
+            
+            <div class="coach-box">
+                <div class="coach-title">
+                    <span class="badge badge-warning">WARNING</span>
+                    Качество жиров
+                </div>
+                <div class="coach-desc">Замечено высокое потребление жиров из майонеза (40.2г жира). Попробуйте заменить майонез на 10-15% сметану, греческий йогурт или авокадо.</div>
+            </div>
+            
+            <div class="coach-box">
+                <div class="coach-title">
+                    <span class="badge badge-warning">WARNING</span>
+                    Избыток жиров
+                </div>
+                <div class="coach-desc">Превышена дневная норма жиров (114.4г из 70г). Рекомендуется снизить растительное масло и жирные соусы в вечернем приеме пищи.</div>
+            </div>
+            
         </div>
 
         <!-- Meal History -->
         <div class="card">
-            <h3 style="margin-bottom: 14px; font-size: 1rem; color: var(--text-muted);">🍽 Приемы пищи (Live Timeline)</h3>
-            <div class="meal-list" id="meal-timeline">
-                <p style="color: var(--text-muted);">Загрузка приемов пищи...</p>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Dynamic API Fetching from Backend or Supabase
-        async function fetchLiveDashboardData() {
-            try {
-                const response = await fetch('/api/summary');
-                if (response.ok) {
-                    const data = await response.json();
-                    renderData(data);
-                } else {
-                    renderFallback();
-                }
-            } catch (err) {
-                renderFallback();
-            }
-        }
-
-        function renderData(data) {
-            const summary = data.summary || {};
-            const goals = summary.goals || { calories: 2200, protein_g: 160, fat_g: 70, carbs_g: 230 };
-
-            document.getElementById('cal-val').innerText = `${summary.total_calories || 0} / ${goals.calories}`;
-            document.getElementById('cal-bar').style.width = `${Math.min(100, ((summary.total_calories || 0) / goals.calories) * 100)}%`;
-
-            document.getElementById('prot-val').innerText = `${summary.total_protein || 0}g / ${goals.protein_g}g`;
-            document.getElementById('prot-bar').style.width = `${Math.min(100, ((summary.total_protein || 0) / goals.protein_g) * 100)}%`;
-
-            document.getElementById('fat-val').innerText = `${summary.total_fat || 0}g / ${goals.fat_g}g`;
-            document.getElementById('fat-bar').style.width = `${Math.min(100, ((summary.total_fat || 0) / goals.fat_g) * 100)}%`;
-
-            document.getElementById('carb-val').innerText = `${summary.total_carbs || 0}g / ${goals.carbs_g}g`;
-            document.getElementById('carb-bar').style.width = `${Math.min(100, ((summary.total_carbs || 0) / goals.carbs_g) * 100)}%`;
-        }
-
-        function renderFallback() {
-            // Render smooth placeholder metrics if offline/unconnected
-            renderData({
-                summary: {
-                    total_calories: 1717,
-                    total_protein: 141.4,
-                    total_fat: 57.2,
-                    total_carbs: 167.9,
-                    goals: { calories: 2200, protein_g: 160, fat_g: 70, carbs_g: 230 }
-                }
-            });
-            document.getElementById('meal-timeline').innerHTML = `
+            <h3 style="margin-bottom: 14px; font-size: 1rem; color: var(--text-muted);">🍽 Приемы пищи</h3>
+            <div class="meal-list">
+            
                 <div class="meal-item">
-                    <div class="meal-time">Сегодня 13:45</div>
+                    <div class="meal-time">2026-09-11 10:16:56</div>
                     <div class="meal-raw">5 яиц, 20г масла сливочного, 200г творог 5%</div>
                     <div class="meal-macros">
                         <span>🔥 684 ккал</span>
@@ -193,8 +169,9 @@
                         <span>🍚 У: 59.1g</span>
                     </div>
                 </div>
+            
                 <div class="meal-item">
-                    <div class="meal-time">Сегодня 18:20</div>
+                    <div class="meal-time">2026-09-11 10:16:56</div>
                     <div class="meal-raw">200г куриная грудка, 150г гречка, 30г майонез</div>
                     <div class="meal-macros">
                         <span>🔥 1033 ккал</span>
@@ -203,12 +180,31 @@
                         <span>🍚 У: 108.8g</span>
                     </div>
                 </div>
-            `;
-        }
-
-        // Auto-refresh every 10 seconds for real-time live sync
-        fetchLiveDashboardData();
-        setInterval(fetchLiveDashboardData, 10000);
-    </script>
+            
+                <div class="meal-item">
+                    <div class="meal-time">2026-09-11 10:07:23</div>
+                    <div class="meal-raw">5 яиц, 20г масла сливочного, 200г творог 5%</div>
+                    <div class="meal-macros">
+                        <span>🔥 684 ккал</span>
+                        <span>🥩 Б: 59.6g</span>
+                        <span>🥑 Ж: 24.8g</span>
+                        <span>🍚 У: 59.1g</span>
+                    </div>
+                </div>
+            
+                <div class="meal-item">
+                    <div class="meal-time">2026-09-11 10:07:23</div>
+                    <div class="meal-raw">200г куриная грудка, 150г гречка, 30г майонез</div>
+                    <div class="meal-macros">
+                        <span>🔥 1033 ккал</span>
+                        <span>🥩 Б: 81.8g</span>
+                        <span>🥑 Ж: 32.4g</span>
+                        <span>🍚 У: 108.8g</span>
+                    </div>
+                </div>
+            
+            </div>
+        </div>
+    </div>
 </body>
 </html>
