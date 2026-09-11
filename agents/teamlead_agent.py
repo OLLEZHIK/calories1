@@ -96,7 +96,11 @@ class TeamLeadAgent:
             return body + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
 
         # 3. Check if user is requesting a system feature / task for TeamLead
-        if any(w in text_lower for w in ["добавь фичу", "сожг", "тренировка", "активные калории", "трекер"]):
+        if any(w in text_lower for w in [
+            "добавь фичу", "сожг", "тренировка", "активные калории", "трекер", "дашборд", "даш борд", 
+            "мобильн", "оптимизир", "верстк", "дизайн", "интерфейс", "адаптив", "техническое задание", 
+            "тимлид", "транскриб", "отличать", "агент", "глюк", "исправь", "настрой", "проверить продукты"
+        ]):
             feature_res = self.process_feature_request(raw_text)
             return (
                 f"👨‍💼 **Тимлид принял задачу!**\n\n{feature_res['summary']}\n\nСформированы подзадачи для агентов:\n" 

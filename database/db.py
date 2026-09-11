@@ -47,8 +47,9 @@ def init_db():
 
 def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal_type: str = "Прием пищи") -> int:
     """
-    Saves a raw meal log and its parsed/calculated items into the database with explicit meal_type category.
+    Saves a raw meal log and its parsed/calculated items into SQLite and Supabase Cloud DB.
     """
+    meal_id = 0
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -57,7 +58,6 @@ def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal
         )
         meal_id = cursor.lastrowid
 
-        
         for item in items:
             cursor.execute(
                 """
@@ -76,12 +76,67 @@ def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal
                 )
             )
         conn.commit()
-        return meal_id
+
+    # Sync to Supabase Cloud DB for persistent Vercel state
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            sp_meal = supabase_request("meals", method="POST", data={
+                "raw_input": raw_input,
+                "input_type": input_type,
+                "notes": meal_type
+            })
+            if sp_meal and isinstance(sp_meal, list) and len(sp_meal) > 0:
+                sp_id = sp_meal[0].get("id")
+                for item in items:
+                    supabase_request("meal_items", method="POST", data={
+                        "meal_id": sp_id,
+                        "product_name": item.get("product_name", "Unknown"),
+                        "category": item.get("category", "general"),
+                        "quantity_g": float(item.get("quantity_g", 0)),
+                        "calories": float(item.get("calories", 0)),
+                        "protein_g": float(item.get("protein_g", 0)),
+                        "fat_g": float(item.get("fat_g", 0)),
+                        "carbs_g": float(item.get("carbs_g", 0))
+                    })
+        except Exception as e:
+            print(f"Supabase Meal Sync warning: {e}")
+
+    return meal_id
 
 def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
     if not target_date:
         target_date = date.today().isoformat()
-        
+
+    # Query Supabase Cloud DB if configured
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            sp_meals = supabase_request("meals?select=*,meal_items(*)")
+            if sp_meals and isinstance(sp_meals, list) and len(sp_meals) > 0:
+                tot_cal = 0.0
+                tot_p = 0.0
+                tot_f = 0.0
+                tot_c = 0.0
+
+                for m in sp_meals:
+                    ts = (m.get("timestamp") or "")[:10]
+                    if not target_date or ts == target_date:
+                        for mi in m.get("meal_items", []):
+                            tot_cal += float(mi.get("calories", 0))
+                            tot_p += float(mi.get("protein_g", 0))
+                            tot_f += float(mi.get("fat_g", 0))
+                            tot_c += float(mi.get("carbs_g", 0))
+
+                return {
+                    "date": target_date,
+                    "total_calories": round(tot_cal, 1),
+                    "total_protein": round(tot_p, 1),
+                    "total_fat": round(tot_f, 1),
+                    "total_carbs": round(tot_c, 1),
+                    "goals": DEFAULT_GOALS
+                }
+        except Exception as e:
+            print(f"Supabase summary warning: {e}")
+
     with get_connection() as conn:
         cursor = conn.cursor()
         query = """
@@ -95,8 +150,7 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
             WHERE DATE(m.timestamp) = DATE(?)
         """
         row = cursor.execute(query, (target_date,)).fetchone()
-        
-        # Get user goals
+
         goals_row = cursor.execute("SELECT * FROM user_goals ORDER BY id DESC LIMIT 1").fetchone()
         goals = {
             "calories": goals_row["calories"] if goals_row else 2200,
@@ -104,7 +158,7 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
             "fat_g": goals_row["fat_g"] if goals_row else 70,
             "carbs_g": goals_row["carbs_g"] if goals_row else 230,
         }
-        
+
         return {
             "date": target_date,
             "total_calories": round(row["total_calories"], 1),
@@ -115,19 +169,42 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
         }
 
 def get_recent_meals(limit: int = 10) -> List[Dict[str, Any]]:
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            sp_meals = supabase_request(f"meals?select=*,meal_items(*)&order=timestamp.desc&limit={limit}")
+            if sp_meals and isinstance(sp_meals, list) and len(sp_meals) > 0:
+                result = []
+                for m in sp_meals:
+                    items = m.get("meal_items", [])
+                    result.append({
+                        "id": m.get("id"),
+                        "timestamp": (m.get("timestamp") or "")[:16].replace("T", " "),
+                        "raw_input": m.get("raw_input"),
+                        "input_type": m.get("input_type"),
+                        "meal_type": m.get("notes") or "Прием пищи",
+                        "items": items,
+                        "total_calories": int(round(sum(float(i.get("calories", 0)) for i in items))),
+                        "total_protein": int(round(sum(float(i.get("protein_g", 0)) for i in items))),
+                        "total_fat": int(round(sum(float(i.get("fat_g", 0)) for i in items))),
+                        "total_carbs": int(round(sum(float(i.get("carbs_g", 0)) for i in items))),
+                    })
+                return result
+        except Exception as e:
+            print(f"Supabase recent meals warning: {e}")
+
     with get_connection() as conn:
         cursor = conn.cursor()
         meals_rows = cursor.execute(
             "SELECT * FROM meals ORDER BY timestamp DESC LIMIT ?", (limit,)
         ).fetchall()
-        
+
         result = []
         for m in meals_rows:
             items_rows = cursor.execute(
                 "SELECT * FROM meal_items WHERE meal_id = ?", (m["id"],)
             ).fetchall()
             items = [dict(item) for item in items_rows]
-            
+
             result.append({
                 "id": m["id"],
                 "timestamp": m["timestamp"],
@@ -141,7 +218,6 @@ def get_recent_meals(limit: int = 10) -> List[Dict[str, Any]]:
                 "total_carbs": int(round(sum(i["carbs_g"] for i in items))),
             })
         return result
-
 
 def save_product_price(product_name: str, price_rub: float, weight_g: float, category: str = "general",
                        protein_100g: float = 0, fat_100g: float = 0, carbs_100g: float = 0, calories_100g: float = 0):
@@ -162,7 +238,49 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float, cat
         )
         conn.commit()
 
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            supabase_request("product_prices", method="POST", data={
+                "product_name": product_name,
+                "category": category,
+                "price_rub": price_rub,
+                "weight_g": weight_g,
+                "protein_per_100g": protein_100g,
+                "fat_per_100g": fat_100g,
+                "carbs_per_100g": carbs_100g,
+                "calories_per_100g": calories_100g
+            })
+        except Exception as e:
+            print(f"Supabase price sync warning: {e}")
+
 def get_product_prices() -> List[Dict[str, Any]]:
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            sp_products = supabase_request("product_prices?select=*&order=product_name.asc")
+            if sp_products and isinstance(sp_products, list) and len(sp_products) > 0:
+                result = []
+                for d in sp_products:
+                    p = float(d.get("protein_per_100g", 0))
+                    f = float(d.get("fat_per_100g", 0))
+                    c = float(d.get("carbs_per_100g", 0))
+                    cal = float(d.get("calories_per_100g", 0))
+
+                    protein_ratio = (p * 4.0) / cal if cal > 0 else 0.1
+                    score = round(min(10.0, max(1.0, (protein_ratio * 12.0) + 3.0)), 1)
+                    badge_class = "good" if score >= 7.5 else ("warn" if score >= 5.0 else "crit")
+                    label = "Высокий" if score >= 7.5 else ("Средний" if score >= 5.0 else "Низкий")
+
+                    d["calories_per_100g"] = int(round(cal))
+                    d["protein_per_100g"] = int(round(p))
+                    d["fat_per_100g"] = int(round(f))
+                    d["carbs_per_100g"] = int(round(c))
+                    d["efficiency_score"] = score
+                    d["efficiency_label"] = label
+                    d["badge_class"] = badge_class
+                    result.append(d)
+                return result
+        except Exception as e:
+            print(f"Supabase product prices warning: {e}")
     with get_connection() as conn:
         cursor = conn.cursor()
         rows = cursor.execute("SELECT * FROM product_prices ORDER BY product_name").fetchall()

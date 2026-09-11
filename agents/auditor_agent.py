@@ -10,8 +10,21 @@ class AuditorAgent:
         self.name = "AuditorAgent"
 
     def audit(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        non_food_keywords = [
+            "дашборд", "даш борд", "оптимизируй", "оптимизация", "верстка", "верстк", "дизайн",
+            "интерфейс", "кнопка", "сервер", "ошибка", "баг", "исправь", "настрой", "сделай",
+            "разработчик", "версия", "мобилка", "мобильная", "фича", "код", "тест"
+        ]
+
         audited_items = []
         for item in items:
+            p_name = (item.get("product_name") or "").lower()
+
+            # Skip items that are clearly technical instructions or system feedback
+            if any(kw in p_name for kw in non_food_keywords):
+                print(f"AuditorAgent filtered out non-food input: '{item.get('product_name')}'")
+                continue
+
             p = float(item.get("protein_g", 0))
             f = float(item.get("fat_g", 0))
             c = float(item.get("carbs_g", 0))
@@ -26,7 +39,6 @@ class AuditorAgent:
                 item["audit_note"] = f"Calories corrected from {cal} to macro-based {expected_calories}"
             else:
                 item["audit_note"] = "Audit verified OK"
-
 
             audited_items.append(item)
 

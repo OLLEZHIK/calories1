@@ -27,8 +27,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Supabase Cloud Database Config
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
-USE_SUPABASE = os.getenv("USE_SUPABASE", "false").lower() in ["true", "1", "yes"]
+SUPABASE_KEY = os.getenv("SUPABASE_SECRET_KEY", "").strip() or os.getenv("SUPABASE_KEY", "").strip()
+USE_SUPABASE = os.getenv("USE_SUPABASE", "true").lower() in ["true", "1", "yes"]
 
 # Default User Daily Goals
 DEFAULT_GOALS = {
