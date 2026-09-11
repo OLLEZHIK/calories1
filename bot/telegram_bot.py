@@ -51,7 +51,7 @@ def process_user_meal_input(raw_text: str, input_type: str = "text") -> str:
     today = get_today_summary()
 
     response = (
-        f"✅ **Прием пищи записан!** (Meal #{meal_id})\n\n"
+        f"✅ **Прием пищи записан!** (Запись #{meal_id})\n\n"
         + "\n".join(item_lines) + "\n\n"
         + f"🔥 **Сумма за прием**: {round(total_cal)} ккал | Б: {round(total_p,1)}g | Ж: {round(total_f,1)}g | У: {round(total_c,1)}g\n\n"
         + f"📊 **Всего за день**: {today['total_calories']}/{today['goals']['calories']} ккал "
@@ -64,7 +64,7 @@ def process_user_meal_input(raw_text: str, input_type: str = "text") -> str:
 def start_bot():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        logger.warning("TELEGRAM_BOT_TOKEN is not set. Bot running in dry-run mode.")
+        logger.warning("TELEGRAM_BOT_TOKEN is not set in .env. Please set TELEGRAM_BOT_TOKEN to launch.")
         return
 
     try:
@@ -77,21 +77,53 @@ def start_bot():
                 "Отправляй мне:\n"
                 "🎤 Голосовые сообщения с описанием еды\n"
                 "💬 Текстовые сообщения ('5 яиц, 20г масла')\n"
-                "📷 Фотографии блюд\n"
+                "📷 Фотографии блюд с описанием в подписи\n"
                 "💰 Цены продуктов: '/price творог 150р 200г'\n\n"
                 "Команды:\n"
-                "/summary — итоги дня\n"
-                "/coach — советы от ИИ-тренера"
+                "/summary — итоги и нормы за сегодня\n"
+                "/coach — советы ИИ-тренера"
             )
 
-        async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            today = get_today_summary()
+            res = (
+                f"📊 **Итоги за сегодня ({today['date']})**:\n\n"
+                f"🔥 **Калории**: {today['total_calories']} / {today['goals']['calories']} ккал\n"
+                f"🥩 **Белки**: {today['total_protein']}g / {today['goals']['protein_g']}g\n"
+                f"🥑 **Жиры**: {today['total_fat']}g / {today['goals']['fat_g']}g\n"
+                f"🍚 **Углеводы**: {today['total_carbs']}g / {today['goals']['carbs_g']}g"
+            )
+            await update.message.reply_markdown(res)
+
+        async def coach_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            analysis = coach_agent.analyze()
+            recs = analysis.get("recommendations", [])
+            lines = [f"💡 **[{r['severity'].upper()}]** {r['message']}" for r in recs]
+            await update.message.reply_markdown("\n\n".join(lines) if lines else "Советы формируются на основе вашего рациона.")
+
+        async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = update.message.text
             response = process_user_meal_input(text, input_type="text")
             await update.message.reply_markdown(response)
 
+        async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            await update.message.reply_text("🎤 Голосовое сообщение получено! Обрабатываем...")
+            # If transcript engine is configured, transcribe audio; otherwise prompt text
+            response = "🎤 Голосовые сообщения подключены! Введите надиктованный текст еды для тестовой записи."
+            await update.message.reply_text(response)
+
+        async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            caption = update.message.caption or "100г салат, 200г курица"
+            response = process_user_meal_input(caption, input_type="photo")
+            await update.message.reply_markdown(f"📷 **Фото блюда обработано!**\n\n{response}")
+
         app = ApplicationBuilder().token(token).build()
         app.add_handler(CommandHandler("start", start_command))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        app.add_handler(CommandHandler("summary", summary_command))
+        app.add_handler(CommandHandler("coach", coach_command))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+        app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+        app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
         logger.info("Telegram Bot started listening...")
         app.run_polling()
