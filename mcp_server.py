@@ -2,6 +2,13 @@ import json
 import sys
 from typing import Dict, Any
 
+# Ensure UTF-8 output formatting for Windows consoles
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
+
 from bot.telegram_bot import process_user_meal_input
 from database.db import get_today_summary, get_recent_meals
 from agents.coach_agent import coach_agent

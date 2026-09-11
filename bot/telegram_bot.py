@@ -112,10 +112,35 @@ def start_bot():
             await update.message.reply_markdown(response)
 
         async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            await update.message.reply_text("🎤 Голосовое сообщение получено! Обрабатываем...")
-            # If transcript engine is configured, transcribe audio; otherwise prompt text
-            response = "🎤 Голосовые сообщения подключены! Введите надиктованный текст еды для тестовой записи."
-            await update.message.reply_text(response)
+            await update.message.reply_text("🎤 Голосовое сообщение получено! Распознаем...")
+            try:
+                voice = update.message.voice
+                if not voice:
+                    await update.message.reply_text("⚠️ Ошибка: Голосовой файл не найден.")
+                    return
+                
+                file = await context.bot.get_file(voice.file_id)
+                voice_bytes = await file.download_as_bytearray()
+                
+                result = audio_agent.transcribe(bytes(voice_bytes))
+                transcription = result.get("text", "")
+                engine = result.get("engine", "")
+                err = result.get("error", "")
+
+                if transcription:
+                    reply = f"🎤 **Распознано ({engine})**:\n*\"{transcription}\"*\n\n" + process_user_meal_input(transcription, input_type="voice")
+                else:
+                    reply = (
+                        f"⚠️ **Ошибка расшифровки голоса**:\n`{err}`\n\n"
+                        "💡 *Как настроить голосовой ввод:*\n"
+                        "Вставьте свой API-ключ Yandex SpeechKit (`AQ...`), Groq (`gsk_...`), или Gemini (`AIza...`) в настройках приложения (`.env`).\n\n"
+                        "Вы также можете прямо сейчас отправить еду текстом (например: `200г творога, 2 яйца`)."
+                    )
+                await update.message.reply_markdown(reply)
+            except Exception as e:
+                logger.error(f"Error handling voice message: {e}")
+                await update.message.reply_text(f"⚠️ Ошибка при обработке аудио: {e}")
+
 
         async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             caption = update.message.caption or "100г салат, 200г курица"

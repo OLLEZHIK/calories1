@@ -32,7 +32,7 @@ def get_telegram_voice_bytes(token: str, file_id: str) -> bytes:
     try:
         get_file_url = f"https://api.telegram.org/bot{token}/getFile?file_id={file_id}"
         req = urllib.request.Request(get_file_url)
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode('utf-8'))
             file_path = data.get("result", {}).get("file_path")
 
@@ -41,7 +41,7 @@ def get_telegram_voice_bytes(token: str, file_id: str) -> bytes:
 
         download_url = f"https://api.telegram.org/file/bot{token}/{file_path}"
         voice_req = urllib.request.Request(download_url)
-        with urllib.request.urlopen(voice_req) as resp:
+        with urllib.request.urlopen(voice_req, timeout=12) as resp:
             return resp.read()
     except Exception as e:
         print(f"Error downloading Telegram voice file: {e}")
@@ -66,14 +66,19 @@ class handler(BaseHTTPRequestHandler):
                     file_id = voice.get("file_id")
                     voice_bytes = get_telegram_voice_bytes(token, file_id) if file_id else b""
                     
-                    # Call free AudioTranscriptionAgent
-                    transcription = audio_agent.transcribe(voice_bytes) if voice_bytes else ""
+                    if voice_bytes:
+                        result = audio_agent.transcribe(voice_bytes)
+                        transcription = result.get("text", "")
+                        engine = result.get("engine", "")
+                        err = result.get("error", "")
 
-                    if transcription:
-                        reply = f"🎤 **Агент-распознаватель голоса (AudioAgent)**:\n*\"{transcription}\"*\n\n" + process_user_meal_input(transcription, input_type="voice")
+                        if transcription:
+                            reply = f"🎤 **Распознано ({engine})**:\n*\"{transcription}\"*\n\n" + process_user_meal_input(transcription, input_type="voice")
+                        else:
+                            reply = f"⚠️ **Ошибка расшифровки аудио**:\n`{err}`\n\nВы можете вписать еду текстом (например '200г бекона, 5 яиц')."
                     else:
-                        reply = "🎤 **Голосовое сообщение получено!**\nАгент готов к расшифровке. Напишите надиктованный текст (например '200г бекона, 5 яиц') для записи приема пищи."
-                    
+                        reply = "⚠️ Не удалось скачать файл аудиозаписи из Telegram."
+
                     send_telegram_message(token, chat_id, reply)
 
                 elif text:
