@@ -45,17 +45,18 @@ def init_db():
         conn.executescript(sql_script)
         conn.commit()
 
-def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]]) -> int:
+def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal_type: str = "Прием пищи") -> int:
     """
-    Saves a raw meal log and its parsed/calculated items into the database.
+    Saves a raw meal log and its parsed/calculated items into the database with explicit meal_type category.
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO meals (raw_input, input_type) VALUES (?, ?)",
-            (raw_input, input_type)
+            "INSERT INTO meals (raw_input, input_type, notes) VALUES (?, ?, ?)",
+            (raw_input, input_type, meal_type)
         )
         meal_id = cursor.lastrowid
+
         
         for item in items:
             cursor.execute(
@@ -132,13 +133,15 @@ def get_recent_meals(limit: int = 10) -> List[Dict[str, Any]]:
                 "timestamp": m["timestamp"],
                 "raw_input": m["raw_input"],
                 "input_type": m["input_type"],
+                "meal_type": m["notes"] if m["notes"] else "Прием пищи",
                 "items": items,
-                "total_calories": sum(i["calories"] for i in items),
-                "total_protein": sum(i["protein_g"] for i in items),
-                "total_fat": sum(i["fat_g"] for i in items),
-                "total_carbs": sum(i["carbs_g"] for i in items),
+                "total_calories": int(round(sum(i["calories"] for i in items))),
+                "total_protein": int(round(sum(i["protein_g"] for i in items))),
+                "total_fat": int(round(sum(i["fat_g"] for i in items))),
+                "total_carbs": int(round(sum(i["carbs_g"] for i in items))),
             })
         return result
+
 
 def save_product_price(product_name: str, price_rub: float, weight_g: float, category: str = "general",
                        protein_100g: float = 0, fat_100g: float = 0, carbs_100g: float = 0, calories_100g: float = 0):
@@ -153,10 +156,6 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float, cat
                 price_rub = excluded.price_rub,
                 weight_g = excluded.weight_g,
                 category = excluded.category,
-                protein_per_100g = excluded.protein_per_100g,
-                fat_per_100g = excluded.fat_per_100g,
-                carbs_per_100g = excluded.carbs_per_100g,
-                calories_per_100g = excluded.calories_per_100g,
                 updated_at = CURRENT_TIMESTAMP
             """,
             (product_name, category, price_rub, weight_g, protein_100g, fat_100g, carbs_100g, calories_100g)
@@ -166,8 +165,31 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float, cat
 def get_product_prices() -> List[Dict[str, Any]]:
     with get_connection() as conn:
         cursor = conn.cursor()
-        rows = cursor.execute("SELECT *, price_per_100g FROM product_prices ORDER BY product_name").fetchall()
-        return [dict(r) for r in rows]
+        rows = cursor.execute("SELECT * FROM product_prices ORDER BY product_name").fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            p = float(d.get("protein_per_100g", 0))
+            f = float(d.get("fat_per_100g", 0))
+            c = float(d.get("carbs_per_100g", 0))
+            cal = float(d.get("calories_per_100g", 0))
+
+            # Compute Nutrition Efficiency Index (1.0 to 10.0 scale)
+            protein_ratio = (p * 4.0) / cal if cal > 0 else 0.1
+            score = round(min(10.0, max(1.0, (protein_ratio * 12.0) + 3.0)), 1)
+            
+            badge_class = "good" if score >= 7.5 else ("warn" if score >= 5.0 else "crit")
+            label = "Высокий" if score >= 7.5 else ("Средний" if score >= 5.0 else "Низкий")
+
+            d["calories_per_100g"] = int(round(cal))
+            d["protein_per_100g"] = int(round(p))
+            d["fat_per_100g"] = int(round(f))
+            d["carbs_per_100g"] = int(round(c))
+            d["efficiency_score"] = score
+            d["efficiency_label"] = label
+            d["badge_class"] = badge_class
+            result.append(d)
+        return result
 
 def save_coach_recommendation(topic: str, recommendation: str, severity: str = "info"):
     with get_connection() as conn:

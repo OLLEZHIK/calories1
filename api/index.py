@@ -1,6 +1,6 @@
 from http.server import BaseHTTPRequestHandler
 import json
-from database.db import get_today_summary, get_recent_meals
+from database.db import get_today_summary, get_recent_meals, get_product_prices
 from agents.coach_agent import coach_agent
 
 class handler(BaseHTTPRequestHandler):
@@ -9,13 +9,16 @@ class handler(BaseHTTPRequestHandler):
             summary = get_today_summary()
             meals = get_recent_meals(limit=10)
             coach = coach_agent.analyze()
+            products = get_product_prices()
             
             payload = {
                 "status": "success",
                 "summary": summary,
                 "meals": meals,
-                "coach": coach
+                "coach": coach,
+                "products": products
             }
+
             
             self.send_response(200)
             self.send_header('Content-type', 'application/json')

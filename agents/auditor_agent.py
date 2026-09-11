@@ -18,7 +18,7 @@ class AuditorAgent:
             cal = float(item.get("calories", 0))
 
             # Macro energy check: 4 kcal per protein/carb, 9 kcal per fat
-            expected_calories = round((p * 4.0) + (f * 9.0) + (c * 4.0), 1)
+            expected_calories = int(round((p * 4.0) + (f * 9.0) + (c * 4.0)))
 
             # If discrepancy is > 20%, recalculate/adjust calories to ensure macro truth
             if cal > 0 and abs(cal - expected_calories) / cal > 0.20 and expected_calories > 0:
@@ -26,6 +26,7 @@ class AuditorAgent:
                 item["audit_note"] = f"Calories corrected from {cal} to macro-based {expected_calories}"
             else:
                 item["audit_note"] = "Audit verified OK"
+
 
             audited_items.append(item)
 

@@ -253,7 +253,7 @@ a{color:inherit}
   <div class="sect">
     <div class="sect-head">
       <h2>Приемы пищи</h2>
-      <span class="eyebrow">Записи из Telegram / API</span>
+      <span class="eyebrow">Завтрак / Обед / Ужин / Перекус</span>
     </div>
     <hr class="rule-heavy">
 
@@ -270,6 +270,36 @@ a{color:inherit}
           <li><span class="nm">Загрузка данных...</span></li>
         </ul>
       </div>
+    </div>
+  </div>
+
+  <!-- User Products Knowledge Base & AI Efficiency Index -->
+  <div class="sect">
+    <div class="sect-head">
+      <h2>База продуктов и Коэффициент полезности ИИ</h2>
+      <span class="eyebrow">Формируется автоматически на основе вашего рациона</span>
+    </div>
+    <hr class="rule-heavy">
+
+    <div class="panel" style="margin-top:14px; overflow-x:auto">
+      <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13.5px">
+        <thead>
+          <tr style="border-bottom:2px solid var(--hair); background:var(--panel-2)">
+            <th style="padding:10px 14px">ПРОДУКТ</th>
+            <th style="padding:10px 14px">НА 100г</th>
+            <th style="padding:10px 14px">БЕЛКИ (Б)</th>
+            <th style="padding:10px 14px">ЖИРЫ (Ж)</th>
+            <th style="padding:10px 14px">УГЛЕВОДЫ (У)</th>
+            <th style="padding:10px 14px">ЦЕНА ЗА 100г</th>
+            <th style="padding:10px 14px">ПОЛЕЗНОСТЬ ИИ</th>
+          </tr>
+        </thead>
+        <tbody id="products-table-body">
+          <tr>
+            <td colspan="7" style="padding:16px 14px; color:var(--ink-3)">Загрузка базы продуктов...</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -294,33 +324,34 @@ function updateUI(data) {
   const summary = data.summary || {};
   const goals = summary.goals || { calories: 2200, protein_g: 160, fat_g: 70, carbs_g: 230 };
   const meals = data.meals || [];
+  const products = data.products || [];
 
-  const cal = summary.total_calories || 0;
-  const p = summary.total_protein || 0;
-  const f = summary.total_fat || 0;
-  const c = summary.total_carbs || 0;
+  const cal = Math.round(summary.total_calories || 0);
+  const p = Math.round(summary.total_protein || 0);
+  const f = Math.round(summary.total_fat || 0);
+  const c = Math.round(summary.total_carbs || 0);
 
   // Update Dial
-  document.getElementById('dial-kcal').innerText = Math.round(cal);
+  document.getElementById('dial-kcal').innerText = cal;
   document.getElementById('dial-target').innerText = goals.calories;
   const pct = Math.min(1.0, cal / goals.calories);
   const circleOffset = 578 - (578 * pct);
   document.getElementById('dial-circle').style.strokeDashoffset = circleOffset;
 
   // Update KV
-  document.getElementById('kv-left').innerText = `${Math.max(0, Math.round(goals.calories - cal))} ккал`;
-  document.getElementById('kv-p').innerText = `${round1(p)}g / ${goals.protein_g}g`;
-  document.getElementById('kv-f').innerText = `${round1(f)}g / ${goals.fat_g}g`;
-  document.getElementById('kv-c').innerText = `${round1(c)}g / ${goals.carbs_g}g`;
+  document.getElementById('kv-left').innerText = `${Math.max(0, goals.calories - cal)} ккал`;
+  document.getElementById('kv-p').innerText = `${p}g / ${goals.protein_g}g`;
+  document.getElementById('kv-f').innerText = `${f}g / ${goals.fat_g}g`;
+  document.getElementById('kv-c').innerText = `${c}g / ${goals.carbs_g}g`;
 
   // Update Macro Rings
-  document.getElementById('macro-p-val').innerText = `${round1(p)}g`;
+  document.getElementById('macro-p-val').innerText = `${p}g`;
   document.getElementById('ring-p').style.strokeDashoffset = 301 - (301 * Math.min(1.0, p / goals.protein_g));
 
-  document.getElementById('macro-f-val').innerText = `${round1(f)}g`;
+  document.getElementById('macro-f-val').innerText = `${f}g`;
   document.getElementById('ring-f').style.strokeDashoffset = 301 - (301 * Math.min(1.0, f / goals.fat_g));
 
-  document.getElementById('macro-c-val').innerText = `${round1(c)}g`;
+  document.getElementById('macro-c-val').innerText = `${c}g`;
   document.getElementById('ring-c').style.strokeDashoffset = 301 - (301 * Math.min(1.0, c / goals.carbs_g));
 
   // Update Meals List
@@ -328,37 +359,63 @@ function updateUI(data) {
   if (meals.length === 0) {
     container.innerHTML = `<div class="mealcard"><div class="mc-head"><span class="mc-name">Нет записей</span></div><div class="mc-sum"><span class="mc-k">0<small>ккал</small></span></div></div>`;
   } else {
-    container.innerHTML = meals.map((m, idx) => `
-      <div class="mealcard">
-        <div class="mc-head">
-          <span class="mc-name">Прием пищи #${m.id || idx+1}</span>
-          <span class="mc-time">${m.timestamp || 'Сегодня'}</span>
+    container.innerHTML = meals.map((m, idx) => {
+      const mType = m.meal_type || 'Прием пищи';
+      const mIcon = mType === 'Завтрак' ? '🍳' : (mType === 'Обед' ? '🍲' : (mType === 'Ужин' ? '🌙' : '🍎'));
+      return `
+        <div class="mealcard">
+          <div class="mc-head">
+            <span class="mc-name">${mIcon} ${escapeHtml(mType.toUpperCase())} #${m.id || idx+1}</span>
+            <span class="mc-time">${m.timestamp || 'Сегодня'}</span>
+          </div>
+          <div class="mc-sum">
+            <span class="mc-k">${Math.round(m.total_calories || 0)}<small>ккал</small></span>
+            <span class="mc-macro">Б: ${Math.round(m.total_protein || 0)}g | Ж: ${Math.round(m.total_fat || 0)}g | У: ${Math.round(m.total_carbs || 0)}g</span>
+          </div>
+          <ul>
+            ${(m.items || []).map(i => `
+              <li>
+                <span class="nm">${escapeHtml(i.product_name)}</span>
+                <span class="g">${Math.round(i.quantity_g)}г</span>
+                <span class="k">${Math.round(i.calories)} ккал</span>
+              </li>
+            `).join('')}
+          </ul>
         </div>
-        <div class="mc-sum">
-          <span class="mc-k">${Math.round(m.total_calories || 0)}<small>ккал</small></span>
-          <span class="mc-macro">Б: ${round1(m.total_protein)}g | Ж: ${round1(m.total_fat)}g | У: ${round1(m.total_carbs)}g</span>
-        </div>
-        <ul>
-          ${(m.items || []).map(i => `
-            <li>
-              <span class="nm">${escapeHtml(i.product_name)}</span>
-              <span class="g">${Math.round(i.quantity_g)}г</span>
-              <span class="k">${Math.round(i.calories)} ккал</span>
-            </li>
-          `).join('')}
-        </ul>
-      </div>
+      `;
+    }).join('');
+  }
+
+  // Update Products Catalog Table
+  const prodTable = document.getElementById('products-table-body');
+  if (products.length === 0) {
+    prodTable.innerHTML = `<tr><td colspan="7" style="padding:16px 14px; color:var(--ink-3)">База продуктов пуста. Начните добавлять еду в боте!</td></tr>`;
+  } else {
+    prodTable.innerHTML = products.map(p => `
+      <tr style="border-top:1px solid var(--hair)">
+        <td style="padding:10px 14px; font-weight:600">${escapeHtml(p.product_name)}</td>
+        <td style="padding:10px 14px; font-family:'JetBrains Mono',monospace">${Math.round(p.calories_per_100g || 0)} ккал</td>
+        <td style="padding:10px 14px; font-family:'JetBrains Mono',monospace; color:var(--p)">${Math.round(p.protein_per_100g || 0)}g</td>
+        <td style="padding:10px 14px; font-family:'JetBrains Mono',monospace; color:var(--f)">${Math.round(p.fat_per_100g || 0)}g</td>
+        <td style="padding:10px 14px; font-family:'JetBrains Mono',monospace; color:var(--c)">${Math.round(p.carbs_per_100g || 0)}g</td>
+        <td style="padding:10px 14px; font-family:'JetBrains Mono',monospace">${p.price_rub ? p.price_rub + ' ₽' : '—'}</td>
+        <td style="padding:10px 14px">
+          <span class="pill ${p.badge_class || 'good'}">
+            ${p.efficiency_score || '8.0'} / 10 (${p.efficiency_label || 'Высокий'})
+          </span>
+        </td>
+      </tr>
     `).join('');
   }
 }
 
-function round1(v) { return Math.round((v || 0) * 10) / 10; }
 function escapeHtml(str) { return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
 function getFallbackData() {
   return {
     summary: { total_calories: 0, total_protein: 0, total_fat: 0, total_carbs: 0, goals: { calories: 2200, protein_g: 160, fat_g: 70, carbs_g: 230 } },
-    meals: []
+    meals: [],
+    products: []
   };
 }
 
@@ -367,3 +424,4 @@ setInterval(loadLiveDashboard, 10000);
 </script>
 </body>
 </html>
+
