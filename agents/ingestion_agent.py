@@ -84,7 +84,7 @@ class IngestionAgent:
             "price_per_100g": round((price_val / weight_g) * 100, 3)
         }
 
-    def _parse_llm(self, raw_input: str) -> List[Dict[str, Any]]:
+    def _parse_llm(self, raw_input: str, image_bytes: bytes = None) -> List[Dict[str, Any]]:
         """
         Uses Gemini 2.0 Flash (primary) or Groq compound-mini (fallback) to extract
         multi-meal items, filtering out conversational filler and self-corrections.
@@ -120,12 +120,17 @@ Return ONLY valid JSON, no markdown, no explanation:
                 from google.genai import types
                 client = genai.Client(api_key=gemini_key)
                 model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+                user_parts = []
+                if image_bytes:
+                    user_parts.append(types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"))
+                user_parts.append(types.Part.from_text(text=raw_input or "Что на этом фото?"))
+
                 resp = client.models.generate_content(
                     model=model,
                     contents=[
-                        types.Content(role="user",  parts=[types.Part(text=sys_prompt)]),
-                        types.Content(role="model", parts=[types.Part(text="Understood. I will return only valid JSON.")]),
-                        types.Content(role="user",  parts=[types.Part(text=raw_input)]),
+                        types.Content(role="user",  parts=[types.Part.from_text(text=sys_prompt)]),
+                        types.Content(role="model", parts=[types.Part.from_text(text="Understood. I will return only valid JSON.")]),
+                        types.Content(role="user",  parts=user_parts),
                     ],
                     config=types.GenerateContentConfig(
                         temperature=0.1,
@@ -180,7 +185,7 @@ Return ONLY valid JSON, no markdown, no explanation:
 
         return []
 
-    def parse(self, raw_input: str) -> List[Dict[str, Any]]:
+    def parse(self, raw_input: str, image_bytes: bytes = None) -> List[Dict[str, Any]]:
         """
         Parses raw text/speech input into structured food items.
         Tries LLM parsing first, falls back to regex matching.
@@ -189,7 +194,7 @@ Return ONLY valid JSON, no markdown, no explanation:
             return []
 
         # 1. Try LLM Parsing
-        llm_meals = self._parse_llm(raw_input)
+        llm_meals = self._parse_llm(raw_input, image_bytes=image_bytes)
         if llm_meals:
             all_items = []
             for m in llm_meals:

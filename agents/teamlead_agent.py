@@ -91,11 +91,11 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
             print(f"Intent classification error: {e}")
         return None
 
-    def route_input(self, raw_text: str, input_type: str = "text") -> str:
-        if not raw_text or not raw_text.strip():
+    def route_input(self, raw_text: str, input_type: str = "text", image_bytes: bytes = None) -> str:
+        if not raw_text and not image_bytes:
             return "⚠️ Пустое сообщение. Напишите или надиктуйте еду (например: '200г творога, 2 яйца')."
 
-        text_lower = raw_text.lower().strip()
+        text_lower = raw_text.lower().strip() if raw_text else ""
 
         # Guard: reject UI button texts that must never reach the food pipeline
         NON_FOOD_UI_TEXTS = [
@@ -209,11 +209,11 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
                 )
 
         # 4. Multi-Meal Processing Pipeline (Supports multiple meals dictated in one audio message)
-        llm_meals = ingestion_agent._parse_llm(raw_text)
+        llm_meals = ingestion_agent._parse_llm(raw_text, image_bytes=image_bytes)
         
         # If LLM didn't return multi-meal array, build single meal structure only for explicit food items
         if not llm_meals:
-            parsed_items = ingestion_agent.parse(raw_text)
+            parsed_items = ingestion_agent.parse(raw_text, image_bytes=image_bytes)
             if not parsed_items:
                 return (
                     "🤔 **Не удалось автоматически определить тип сообщения.**\n\n"

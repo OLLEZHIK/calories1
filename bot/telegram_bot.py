@@ -15,10 +15,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("CaloriesBot")
 
 
-def process_user_meal_input(raw_text: str, input_type: str = "text") -> str:
+def process_user_meal_input(raw_text: str, input_type: str = "text", image_bytes: bytes = None) -> str:
     """Routes input through TeamLeadAgent (auto intent detection)."""
     from agents.teamlead_agent import teamlead_agent
-    return teamlead_agent.route_input(raw_text, input_type=input_type)
+    return teamlead_agent.route_input(raw_text, input_type=input_type, image_bytes=image_bytes)
 
 
 def process_task_input(raw_text: str) -> str:
@@ -196,9 +196,17 @@ def start_bot():
 
         # ── Photo handler ─────────────────────────────────────────────────
         async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            caption = update.message.caption or "100г салат, 200г курица"
-            response = process_user_meal_input(caption, input_type="photo")
-            await update.message.reply_markdown(f"📷 **Фото блюда обработано!**\n\n{response}")
+            await update.message.reply_text("📷 Фото получено! ИИ анализирует блюдо...")
+            try:
+                photo_file = await update.message.photo[-1].get_file()
+                image_bytes = await photo_file.download_as_bytearray()
+                caption = update.message.caption or ""
+                
+                response = process_user_meal_input(caption, input_type="photo", image_bytes=bytes(image_bytes))
+                await update.message.reply_markdown(f"📷 **Фото блюда обработано!**\n\n{response}")
+            except Exception as e:
+                logger.error(f"Photo error: {e}")
+                await update.message.reply_text(f"⚠️ Ошибка при обработке фото: {e}")
 
         # ── App setup ─────────────────────────────────────────────────────
         app = ApplicationBuilder().token(token).build()
