@@ -153,7 +153,22 @@ Return ONLY JSON object:
             if all_items:
                 return all_items
 
-        # 2. Fallback Regex Parsing
+        # 2. Fallback Regex Parsing (Only execute if text contains explicit food units or known food words)
+        text_lower = raw_input.lower()
+        food_units_pattern = r'(\d+[\.,]?\d*)\s*(г|гр|грамм|г.|g|кг|kg|шт|штук|яиц|яйца|стакан|ложка|ст.л|ч.л|ккал|kcal|калорий)'
+        has_unit = re.search(food_units_pattern, text_lower) is not None
+        
+        known_food_keywords = [
+            "яйцо", "яйца", "творог", "макароны", "бекон", "майонез", "сосиски", "моцарелла",
+            "сыр", "курица", "мясо", "рыба", "рис", "гречка", "хлеб", "масло", "помидор",
+            "огурец", "яблоко", "банан", "молоко", "сметана", "протеин", "каша", "суп", "салат"
+        ]
+        has_known_food = any(kw in text_lower for kw in known_food_keywords)
+
+        if not (has_unit or has_known_food):
+            # Not an explicit food input: return empty array to trigger intent clarification instead of hallucinating
+            return []
+
         items = []
         parts = re.split(r'[,;\n\+]|\bи\b|\band\b', raw_input, flags=re.IGNORECASE)
 

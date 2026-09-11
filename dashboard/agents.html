@@ -186,34 +186,9 @@ h1,h2,h3{margin:0; font-family:Oswald,"Golos Text",sans-serif; font-weight:600}
 
     <div class="terminal-box" id="terminal-logs">
       <div class="log-line">
-        <span class="log-time">12:45:01</span>
+        <span class="log-time">System</span>
         <span class="log-agent">[System]</span>
-        <span class="log-msg"><span class="log-tag-ok">INFO</span> Мультиагентный конвейер Calories AI запущен. Ожидание событий Telegram / API...</span>
-      </div>
-      <div class="log-line">
-        <span class="log-time">12:45:05</span>
-        <span class="log-agent">[IngestionAgent]</span>
-        <span class="log-msg"><span class="log-tag-ok">PARSE_OK</span> Распознано: "200г бекона, 5 яиц". Извлечена граммовка: бекон (200g), яйца (275g).</span>
-      </div>
-      <div class="log-line">
-        <span class="log-time">12:45:06</span>
-        <span class="log-agent">[NutritionAgent]</span>
-        <span class="log-msg"><span class="log-tag-ok">MATCH_LOCAL</span> Продукт 'бекон' найден в локальной справочной базе (541 ккал / 100г, Б:37g, Ж:42g, У:1.4g).</span>
-      </div>
-      <div class="log-line">
-        <span class="log-time">12:45:06</span>
-        <span class="log-agent">[AuditorAgent]</span>
-        <span class="log-msg"><span class="log-tag-ok">AUDIT_PASS</span> Энергетический баланс (4*P + 9*F + 4*C = 1082 ккал) совпадает с нормой. Ошибок не обнаружено.</span>
-      </div>
-      <div class="log-line">
-        <span class="log-time">12:45:07</span>
-        <span class="log-agent">[CoachAgent]</span>
-        <span class="log-msg"><span class="log-tag-warn">ADVICE_GEN</span> Сформирована рекомендация: Высокое потребление жиров из бекона. Сбалансируйте вечерний прием пищи.</span>
-      </div>
-      <div class="log-line">
-        <span class="log-time">12:45:07</span>
-        <span class="log-agent">[DashboardAgent]</span>
-        <span class="log-msg"><span class="log-tag-ok">SYNC_SUPABASE</span> Данные приема пищи #4 синхронизированы с Supabase Cloud и живым веб-дашбордом.</span>
+        <span class="log-msg"><span class="log-tag-ok">CONNECTING</span> Загрузка телеметрии ИИ-агентов из облачной базы...</span>
       </div>
     </div>
   </div>
@@ -227,32 +202,39 @@ async function loadAgentLogs() {
     const res = await fetch('/api/summary');
     if (res.ok) {
       const data = await res.json();
-      appendLiveLogs(data);
+      renderLiveLogs(data);
     }
   } catch (e) {}
 }
 
-function appendLiveLogs(data) {
-  const meals = data.meals || [];
-  if (meals.length > 0) {
-    const latest = meals[0];
-    const term = document.getElementById('terminal-logs');
-    const existing = term.innerHTML;
-    
-    // Add real payload log entry
-    const newEntry = `
+function renderLiveLogs(data) {
+  const telemetry = data.agent_telemetry || [];
+  const term = document.getElementById('terminal-logs');
+  
+  if (telemetry.length === 0) {
+    term.innerHTML = `
       <div class="log-line">
-        <span class="log-time">${new Date().toLocaleTimeString()}</span>
-        <span class="log-agent">[Pipeline]</span>
-        <span class="log-msg"><span class="log-tag-ok">TELEMETRY</span> Прием пищи #${latest.id || 1}: "${escapeHtml(latest.raw_input)}" -> Считано ${Math.round(latest.total_calories || 0)} ккал (Б:${Math.round(latest.total_protein || 0)}g, Ж:${Math.round(latest.total_fat || 0)}g, У:${Math.round(latest.total_carbs || 0)}g)</span>
+        <span class="log-time">System</span>
+        <span class="log-agent">[System]</span>
+        <span class="log-msg"><span class="log-tag-ok">READY</span> Мультиагентная система готова к работе. Запишите еду в боте для генерации логов!</span>
       </div>
     `;
-    term.innerHTML = newEntry + existing;
+    return;
   }
+
+  term.innerHTML = telemetry.map(log => `
+    <div class="log-line">
+      <span class="log-time">${escapeHtml(log.timestamp || 'Live')}</span>
+      <span class="log-agent">[${escapeHtml(log.agent || 'Agent')}]</span>
+      <span class="log-msg"><span class="log-tag-ok">${escapeHtml(log.tag || 'OK')}</span> ${escapeHtml(log.message || '')}</span>
+    </div>
+  `).join('');
 }
 
 function escapeHtml(str) { return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
-setInterval(loadAgentLogs, 10000);
+
+loadAgentLogs();
+setInterval(loadAgentLogs, 5000);
 </script>
 </body>
 </html>

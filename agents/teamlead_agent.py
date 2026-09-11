@@ -95,11 +95,12 @@ class TeamLeadAgent:
             body = "\n\n".join(lines) if lines else "💡 Советы формируются на основе вашего ежедневного рациона."
             return body + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
 
-        # 3. Check if user is requesting a system feature / task for TeamLead
+        # 3. Check if user is requesting a system feature / task / body metric update for TeamLead
         if any(w in text_lower for w in [
             "добавь фичу", "сожг", "тренировка", "активные калории", "трекер", "дашборд", "даш борд", 
             "мобильн", "оптимизир", "верстк", "дизайн", "интерфейс", "адаптив", "техническое задание", 
-            "тимлид", "транскриб", "отличать", "агент", "глюк", "исправь", "настрой", "проверить продукты"
+            "тимлид", "транскриб", "отличать", "агент", "глюк", "исправь", "настрой", "проверить продукты",
+            "рост", "роста", "вес", "веса", "килограмм", "килограмма", "рост 1", "вес 7"
         ]):
             feature_res = self.process_feature_request(raw_text)
             return (
@@ -111,11 +112,17 @@ class TeamLeadAgent:
         # 4. Multi-Meal Processing Pipeline (Supports multiple meals dictated in one audio message)
         llm_meals = ingestion_agent._parse_llm(raw_text)
         
-        # If LLM didn't return multi-meal array, build single meal fallback structure
+        # If LLM didn't return multi-meal array, build single meal structure only for explicit food items
         if not llm_meals:
             parsed_items = ingestion_agent.parse(raw_text)
             if not parsed_items:
-                return "⚠️ Не удалось распознать продукты. Напишите или надиктуйте в формате: '200г творога, 2 яйца, стакан молока'."
+                return (
+                    "🤔 **Не удалось автоматически определить тип сообщения.**\n\n"
+                    "Вы хотите записать еду или отправить задачу ИИ-ассистенту?\n\n"
+                    "• 🍲 **Записать еду**: '3 яйца, 80г макарон, 20г бекона'\n"
+                    "• 👨‍💼 **Техническая задача**: 'Добавь на дашборд показатель веса 74 кг'\n\n"
+                    "🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
+                )
             meal_type = detect_meal_type(raw_text)
             llm_meals = [{"meal_type": meal_type, "items": parsed_items}]
 
