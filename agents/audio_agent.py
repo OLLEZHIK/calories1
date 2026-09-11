@@ -85,12 +85,15 @@ class AudioTranscriptionAgent:
                 print(err_msg)
                 errors.append(err_msg)
 
-        # 3. Gemini 1.5 Flash Audio API (Key starts with AIza)
-        if speech_key.startswith("AIza") or os.getenv("GEMINI_API_KEY"):
-            gkey = os.getenv("GEMINI_API_KEY", speech_key)
+        # 3. Gemini 1.5 Flash Audio API (Key MUST start with AIza)
+        gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not gemini_key and speech_key.startswith("AIza"):
+            gemini_key = speech_key
+
+        if gemini_key and gemini_key.startswith("AIza"):
             try:
                 b64_audio = base64.b64encode(voice_bytes).decode('utf-8')
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gkey}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
                 payload = {
                     "contents": [{
                         "parts": [
@@ -114,6 +117,7 @@ class AudioTranscriptionAgent:
                 err_msg = f"Gemini Audio Error: {e}"
                 print(err_msg)
                 errors.append(err_msg)
+
 
         # 4. HuggingFace Whisper (Key starts with hf_)
         if speech_key.startswith("hf_"):
