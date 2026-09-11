@@ -2,150 +2,205 @@ import os
 import sys
 import logging
 from pathlib import Path
-from typing import Dict, Any
 
 # Ensure project root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from agents.ingestion_agent import ingestion_agent
-from agents.nutrition_agent import nutrition_agent
-from agents.auditor_agent import auditor_agent
 from agents.economy_agent import economy_agent
 from agents.coach_agent import coach_agent
-from agents.dashboard_agent import dashboard_agent
 from agents.audio_agent import audio_agent
 from database.db import save_meal, get_today_summary
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("CaloriesBot")
 
+
 def process_user_meal_input(raw_text: str, input_type: str = "text") -> str:
-    """
-    Delegates user inputs to TeamLeadAgent for intent routing and specialized multi-agent execution.
-    """
+    """Routes input through TeamLeadAgent (auto intent detection)."""
     from agents.teamlead_agent import teamlead_agent
     return teamlead_agent.route_input(raw_text, input_type=input_type)
 
 
-# Telegram Bot Launcher using python-telegram-bot
+def process_task_input(raw_text: str) -> str:
+    """Routes input DIRECTLY to TeamLead as a feature/task — no intent detection."""
+    from agents.teamlead_agent import teamlead_agent
+    feature_res = teamlead_agent.process_feature_request(raw_text)
+    return (
+        f"👨\u200d💼 **Тимлид принял задачу!**\n\n{feature_res['summary']}\n\n"
+        "Сформированы подзадачи для агентов:\n"
+        + "\n".join([f"• [{t['agent']}]: {t['task']}" for t in feature_res.get("tasks", [])])
+        + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
+    )
+
+
+# ── Telegram Bot ─────────────────────────────────────────────────────────────
 def start_bot():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
-        logger.warning("TELEGRAM_BOT_TOKEN is not set in .env. Please set TELEGRAM_BOT_TOKEN to launch.")
+        logger.warning("TELEGRAM_BOT_TOKEN not set in .env")
         return
 
     try:
-        from telegram import Update
-        from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-
-        from telegram import ReplyKeyboardMarkup
+        from telegram import Update, ReplyKeyboardMarkup
+        from telegram.ext import (
+            ApplicationBuilder, CommandHandler, MessageHandler,
+            filters, ContextTypes
+        )
 
         main_keyboard = ReplyKeyboardMarkup(
             [
-                ["🍲 Запись приема пищи", "👨‍💼 Технический таск"],
-                ["📊 Итоги за сегодня", "💡 Советы ИИ-тренера"]
+                ["🍲 Запись приема пищи", "👨\u200d💼 Технический таск"],
+                ["📊 Итоги за сегодня",  "💡 Советы ИИ-тренера"]
             ],
             resize_keyboard=True
         )
 
+        # ── Mode keys stored in context.user_data ────────────────────────
+        MODE_FOOD = "food"
+        MODE_TASK = "task"
+
+        def get_mode(ctx):
+            return ctx.user_data.get("mode")
+
+        def set_mode(ctx, mode):
+            ctx.user_data["mode"] = mode
+
+        # ── /start ────────────────────────────────────────────────────────
         async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            await update.message.reply_text(
+            set_mode(context, None)
+            await update.message.reply_markdown(
                 "👋 **Привет! Я твой ИИ-ассистент по питанию Calories AI.**\n\n"
-                "Выберите нужную команду кнопками ниже или надиктуйте сообщение:\n"
-                "• 🍲 **Запись приема пищи** — чтобы записать еду\n"
-                "• 👨‍💼 **Технический таск** — чтобы отправить задачу Тимлиду\n"
-                "• 📊 **Итоги за сегодня** — посмотреть КБЖУ за день\n"
-                "• 💡 **Советы ИИ-тренера** — узнать рекомендации",
+                "Выберите нужную команду кнопками ниже:\n"
+                "• 🍲 **Запись приема пищи** — записать еду\n"
+                "• 👨\u200d💼 **Технический таск** — задача Тимлиду\n"
+                "• 📊 **Итоги за сегодня** — КБЖУ за день\n"
+                "• 💡 **Советы ИИ-тренера** — рекомендации ИИ",
                 reply_markup=main_keyboard
             )
 
+        # ── /summary ──────────────────────────────────────────────────────
         async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            set_mode(context, None)
             today = get_today_summary()
-            res = (
+            await update.message.reply_markdown(
                 f"📊 **Итоги за сегодня ({today['date']})**:\n\n"
                 f"🔥 **Калории**: {int(round(today['total_calories']))} / {today['goals']['calories']} ккал\n"
                 f"🥩 **Белки**: {int(round(today['total_protein']))}g / {today['goals']['protein_g']}g\n"
                 f"🥑 **Жиры**: {int(round(today['total_fat']))}g / {today['goals']['fat_g']}g\n"
                 f"🍚 **Углеводы**: {int(round(today['total_carbs']))}g / {today['goals']['carbs_g']}g"
-                f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
+                f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)",
+                reply_markup=main_keyboard
             )
-            await update.message.reply_markdown(res, reply_markup=main_keyboard)
 
+        # ── /coach ────────────────────────────────────────────────────────
         async def coach_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            set_mode(context, None)
             analysis = coach_agent.analyze()
             recs = analysis.get("recommendations", [])
             lines = [f"💡 **[{r['severity'].upper()}]** {r['message']}" for r in recs]
-            body = "\n\n".join(lines) if lines else "💡 Советы формируются на основе вашего ежедневного рациона."
-            await update.message.reply_markdown(body + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)", reply_markup=main_keyboard)
+            body = "\n\n".join(lines) if lines else "💡 Советы формируются на основе вашего рациона."
+            await update.message.reply_markdown(
+                body + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)",
+                reply_markup=main_keyboard
+            )
 
-        # All button texts — used to guard against accidental food processing
-        BUTTON_TEXTS = {
-            "🍲 Запись приема пищи", "👨‍💼 Технический таск",
-            "📊 Итоги за сегодня", "💡 Советы ИИ-тренера"
-        }
-
+        # ── Text handler ──────────────────────────────────────────────────
         async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (update.message.text or "").strip()
+            mode = get_mode(context)
 
+            # Button: enter food mode
             if text in ("🍲 Запись приема пищи", "/food"):
+                set_mode(context, MODE_FOOD)
                 await update.message.reply_markdown(
                     "🍲 **Режим записи приема пищи**\n\n"
-                    "Напишите или надиктуйте голосом вашу еду (например: *'3 яйца, 80г макарон, 20г бекона'*).",
+                    "Напишите или надиктуйте голосом вашу еду\n"
+                    "_(например: '3 яйца, 80г макарон, 20г бекона')_",
                     reply_markup=main_keyboard
                 )
-            elif text in ("👨‍💼 Технический таск", "/task"):
-                await update.message.reply_markdown(
-                    "👨‍💼 **Режим технической задачи Тимлиду**\n\n"
-                    "Опишите задачу или желаемую фичу (например: *'Добавь на дашборд показатель веса 74 кг и роста 175 см'*).",
-                    reply_markup=main_keyboard
-                )
-            elif text in ("📊 Итоги за сегодня", "/summary"):
-                await summary_command(update, context)
-            elif text in ("💡 Советы ИИ-тренера", "/coach"):
-                await coach_command(update, context)
-            elif text in BUTTON_TEXTS:
-                # Safety catch: any other button text must NEVER reach food pipeline
-                await update.message.reply_markdown("👇 Выберите действие с помощью кнопок ниже.", reply_markup=main_keyboard)
-            else:
-                response = process_user_meal_input(text, input_type="text")
-                await update.message.reply_markdown(response, reply_markup=main_keyboard)
+                return
 
+            # Button: enter task mode
+            if text in ("👨\u200d💼 Технический таск", "/task"):
+                set_mode(context, MODE_TASK)
+                await update.message.reply_markdown(
+                    "👨\u200d💼 **Режим технической задачи**\n\n"
+                    "Опишите задачу, вопрос или желаемую фичу голосом или текстом.\n"
+                    "Всё что вы скажете/напишете — уйдёт напрямую Тимлиду.",
+                    reply_markup=main_keyboard
+                )
+                return
+
+            if text in ("📊 Итоги за сегодня", "/summary"):
+                await summary_command(update, context)
+                return
+
+            if text in ("💡 Советы ИИ-тренера", "/coach"):
+                await coach_command(update, context)
+                return
+
+            # Route based on active session mode
+            if mode == MODE_TASK:
+                set_mode(context, None)
+                response = process_task_input(text)
+            elif mode == MODE_FOOD:
+                set_mode(context, None)
+                response = process_user_meal_input(text, input_type="text")
+            else:
+                # No mode — auto detect intent
+                response = process_user_meal_input(text, input_type="text")
+
+            await update.message.reply_markdown(response, reply_markup=main_keyboard)
+
+        # ── Voice handler ─────────────────────────────────────────────────
         async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            mode = get_mode(context)
             await update.message.reply_text("🎤 Голосовое сообщение получено! Распознаем...")
             try:
                 voice = update.message.voice
                 if not voice:
-                    await update.message.reply_text("⚠️ Ошибка: Голосовой файл не найден.")
+                    await update.message.reply_text("⚠️ Голосовой файл не найден.")
                     return
-                
+
                 file = await context.bot.get_file(voice.file_id)
                 voice_bytes = await file.download_as_bytearray()
-                
+
                 result = audio_agent.transcribe(bytes(voice_bytes))
                 transcription = result.get("text", "")
                 engine = result.get("engine", "")
                 err = result.get("error", "")
 
                 if transcription:
-                    reply = f"🎤 **Распознано ({engine})**:\n*\"{transcription}\"*\n\n" + process_user_meal_input(transcription, input_type="voice")
+                    header = f"🎤 **Распознано ({engine})**:\n*\"{transcription}\"*\n\n"
+                    if mode == MODE_TASK:
+                        # Voice after "Технический таск" → direct to TeamLead
+                        set_mode(context, None)
+                        reply = header + process_task_input(transcription)
+                    elif mode == MODE_FOOD:
+                        set_mode(context, None)
+                        reply = header + process_user_meal_input(transcription, input_type="voice")
+                    else:
+                        # Auto detect
+                        reply = header + process_user_meal_input(transcription, input_type="voice")
                 else:
+                    set_mode(context, None)
                     reply = (
                         f"⚠️ **Ошибка расшифровки голоса**:\n`{err}`\n\n"
-                        "💡 *Как настроить голосовой ввод:*\n"
-                        "Вставьте свой API-ключ Yandex SpeechKit (`AQ...`), Groq (`gsk_...`), или Gemini (`AIza...`) в настройках приложения (`.env`).\n\n"
-                        "Вы также можете прямо сейчас отправить еду текстом (например: `200г творога, 2 яйца`)."
+                        "Попробуйте отправить текстом или проверьте GROQ_API_KEY в `.env`."
                     )
-                await update.message.reply_markdown(reply)
+
+                await update.message.reply_markdown(reply, reply_markup=main_keyboard)
             except Exception as e:
-                logger.error(f"Error handling voice message: {e}")
+                logger.error(f"Voice error: {e}")
                 await update.message.reply_text(f"⚠️ Ошибка при обработке аудио: {e}")
 
-
+        # ── Photo handler ─────────────────────────────────────────────────
         async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             caption = update.message.caption or "100г салат, 200г курица"
             response = process_user_meal_input(caption, input_type="photo")
             await update.message.reply_markdown(f"📷 **Фото блюда обработано!**\n\n{response}")
 
+        # ── App setup ─────────────────────────────────────────────────────
         app = ApplicationBuilder().token(token).build()
         app.add_handler(CommandHandler("start", start_command))
         app.add_handler(CommandHandler("summary", summary_command))
@@ -158,6 +213,7 @@ def start_bot():
         app.run_polling()
     except Exception as e:
         logger.error(f"Failed to start Telegram Bot: {e}")
+
 
 if __name__ == "__main__":
     start_bot()
