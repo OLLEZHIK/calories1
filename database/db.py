@@ -186,5 +186,9 @@ def get_recent_recommendations(limit: int = 5) -> List[Dict[str, Any]]:
         ).fetchall()
         return [dict(r) for r in rows]
 
-# Initialize DB when module loaded
-init_db()
+# Initialize DB safely when module loaded
+try:
+    init_db()
+except Exception as _db_err:
+    print(f"Warning: SQLite init failed ({_db_err}). Proceeding with cloud/fallback DB.")
+

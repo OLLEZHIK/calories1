@@ -13,9 +13,14 @@ if ENV_FILE.exists():
                 k, v = line.split("=", 1)
                 os.environ[k.strip()] = v.strip()
 
-DB_PATH = os.getenv("DB_PATH", str(BASE_DIR / "calories.db"))
+IS_VERCEL = os.getenv("VERCEL", "0") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None
+if IS_VERCEL:
+    DB_PATH = os.getenv("DB_PATH", "/tmp/calories.db")
+else:
+    DB_PATH = os.getenv("DB_PATH", str(BASE_DIR / "calories.db"))
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+
 TELEGRAM_USER_ID = os.getenv("TELEGRAM_USER_ID", "697275222")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

@@ -98,6 +98,19 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"status": "ok"}')
 
         except Exception as e:
-            self.send_response(500)
+            import traceback
+            err_trace = traceback.format_exc()
+            print(f"Webhook Exception: {err_trace}")
+            try:
+                update = json.loads(post_data)
+                chat_id = update.get("message", {}).get("chat", {}).get("id")
+                if chat_id:
+                    send_telegram_message(token, chat_id, f"⚠️ **Внутренняя ошибка сервера**:\n`{str(e)}`")
+            except Exception:
+                pass
+
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
             self.end_headers()
-            self.wfile.write(f'{{"error": "{str(e)}"}}'.encode('utf-8'))
+            self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
+
