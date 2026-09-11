@@ -5,7 +5,7 @@ import urllib.request
 from typing import List, Dict, Any
 
 # ── Shared Gemini helper ───────────────────────────────────────────────────────
-def _call_gemini(prompt: str, system: str = "", model: str = "gemini-2.0-flash") -> str:
+def _call_gemini(prompt: str, system: str = "", model: str = "gemini-3.6-flash") -> str:
     """Call Gemini API via google-genai SDK. Returns response text or '' on error."""
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
@@ -113,7 +113,7 @@ Return ONLY valid JSON, no markdown, no explanation:
                 from google import genai
                 from google.genai import types
                 client = genai.Client(api_key=gemini_key)
-                model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+                model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
                 resp = client.models.generate_content(
                     model=model,
                     contents=[

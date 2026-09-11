@@ -65,7 +65,7 @@ class TeamLeadAgent:
             from google import genai
             from google.genai import types
             client = genai.Client(api_key=gemini_key)
-            model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+            model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
             prompt = f"""Classify this Russian message into exactly one category. Reply with ONLY the category word.
 
 Categories:
