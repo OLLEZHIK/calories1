@@ -38,40 +38,59 @@ def start_bot():
         from telegram import Update
         from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
+        from telegram import ReplyKeyboardMarkup
+
+        main_keyboard = ReplyKeyboardMarkup(
+            [
+                ["🍲 Запись приема пищи", "👨‍💼 Технический таск"],
+                ["📊 Итоги за сегодня", "💡 Советы ИИ-тренера"]
+            ],
+            resize_keyboard=True
+        )
+
         async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
-                "👋 Привет! Я твой ИИ-ассистент по питанию (Calories AI).\n\n"
-                "Отправляй мне:\n"
-                "🎤 Голосовые сообщения с описанием еды\n"
-                "💬 Текстовые сообщения ('5 яиц, 20г масла')\n"
-                "📷 Фотографии блюд с описанием в подписи\n"
-                "💰 Цены продуктов: '/price творог 150р 200г'\n\n"
-                "Команды:\n"
-                "/summary — итоги и нормы за сегодня\n"
-                "/coach — советы ИИ-тренера"
+                "👋 **Привет! Я твой ИИ-ассистент по питанию Calories AI.**\n\n"
+                "Выберите нужную команду кнопками ниже или надиктуйте сообщение:\n"
+                "• 🍲 **Запись приема пищи** — чтобы записать еду\n"
+                "• 👨‍💼 **Технический таск** — чтобы отправить задачу Тимлиду\n"
+                "• 📊 **Итоги за сегодня** — посмотреть КБЖУ за день\n"
+                "• 💡 **Советы ИИ-тренера** — узнать рекомендации",
+                reply_markup=main_keyboard
             )
 
         async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             today = get_today_summary()
             res = (
                 f"📊 **Итоги за сегодня ({today['date']})**:\n\n"
-                f"🔥 **Калории**: {today['total_calories']} / {today['goals']['calories']} ккал\n"
-                f"🥩 **Белки**: {today['total_protein']}g / {today['goals']['protein_g']}g\n"
-                f"🥑 **Жиры**: {today['total_fat']}g / {today['goals']['fat_g']}g\n"
-                f"🍚 **Углеводы**: {today['total_carbs']}g / {today['goals']['carbs_g']}g"
+                f"🔥 **Калории**: {int(round(today['total_calories']))} / {today['goals']['calories']} ккал\n"
+                f"🥩 **Белки**: {int(round(today['total_protein']))}g / {today['goals']['protein_g']}g\n"
+                f"🥑 **Жиры**: {int(round(today['total_fat']))}g / {today['goals']['fat_g']}g\n"
+                f"🍚 **Углеводы**: {int(round(today['total_carbs']))}g / {today['goals']['carbs_g']}g"
+                f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
             )
-            await update.message.reply_markdown(res)
+            await update.message.reply_markdown(res, reply_markup=main_keyboard)
 
         async def coach_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             analysis = coach_agent.analyze()
             recs = analysis.get("recommendations", [])
             lines = [f"💡 **[{r['severity'].upper()}]** {r['message']}" for r in recs]
-            await update.message.reply_markdown("\n\n".join(lines) if lines else "Советы формируются на основе вашего рациона.")
+            body = "\n\n".join(lines) if lines else "💡 Советы формируются на основе вашего ежедневного рациона."
+            await update.message.reply_markdown(body + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)", reply_markup=main_keyboard)
 
         async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = update.message.text
-            response = process_user_meal_input(text, input_type="text")
-            await update.message.reply_markdown(response)
+            if text in ["🍲 Запись приема пищи", "/food"]:
+                await update.message.reply_markdown("🍲 **Режим записи приема пищи**\n\nНапишите или надиктуйте голосом вашу еду (например: *'3 яйца, 80г макарон, 20г бекона'*).", reply_markup=main_keyboard)
+            elif text in ["👨‍💼 Технический таск", "/task"]:
+                await update.message.reply_markdown("👨‍💼 **Режим технической задачи Тимлиду**\n\nОпишите задачу или желаемую фичу (например: *'Добавь на дашборд показатель веса 74 кг и роста 175 см'*).", reply_markup=main_keyboard)
+            elif text in ["📊 Итоги за сегодня", "/summary"]:
+                await summary_command(update, context)
+            elif text in ["💡 Советы ИИ-тренера", "/coach"]:
+                await coach_command(update, context)
+            else:
+                response = process_user_meal_input(text, input_type="text")
+                await update.message.reply_markdown(response, reply_markup=main_keyboard)
 
         async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🎤 Голосовое сообщение получено! Распознаем...")

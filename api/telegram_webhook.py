@@ -12,13 +12,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bot.telegram_bot import process_user_meal_input
 from agents.audio_agent import audio_agent
 
-def send_telegram_message(token: str, chat_id: int, text: str):
-    """Sends reply back to Telegram user via Telegram Bot API."""
+MAIN_KEYBOARD = {
+    "keyboard": [
+        [{"text": "🍲 Запись приема пищи"}, {"text": "👨‍💼 Технический таск"}],
+        [{"text": "📊 Итоги за сегодня"}, {"text": "💡 Советы ИИ-тренера"}]
+    ],
+    "resize_keyboard": True
+}
+
+def send_telegram_message(token: str, chat_id: int, text: str, reply_markup: Optional[Dict[str, Any]] = None):
+    """Sends reply back to Telegram user via Telegram Bot API with interactive buttons."""
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
-        "parse_mode": "Markdown"
+        "parse_mode": "Markdown",
+        "reply_markup": reply_markup or MAIN_KEYBOARD
     }
     headers = {"Content-Type": "application/json"}
     req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers, method="POST")
@@ -82,14 +91,40 @@ class handler(BaseHTTPRequestHandler):
                     send_telegram_message(token, chat_id, reply)
 
                 elif text:
-                    if text == "/start":
-                        reply = "👋 Привет! Я твой ИИ-ассистент по питанию (Calories AI).\nЗаписывай еду текстом или надиктовывай голосом!"
-                    elif text == "/summary":
+                    if text in ["/start", "меню", "главное меню"]:
+                        reply = (
+                            "👋 **Привет! Я твой ИИ-ассистент по питанию Calories AI.**\n\n"
+                            "Выберите нужную команду кнопками ниже или надиктуйте сообщение:\n"
+                            "• 🍲 **Запись приема пищи** — чтобы записать еду\n"
+                            "• 👨‍💼 **Технический таск** — чтобы отправить задачу Тимлиду\n"
+                            "• 📊 **Итоги за сегодня** — посмотреть КБЖУ за день\n"
+                            "• 💡 **Советы ИИ-тренера** — узнать рекомендации"
+                        )
+                    elif text in ["🍲 Запись приема пищи", "/food"]:
+                        reply = "🍲 **Режим записи приема пищи**\n\nНапишите или надиктуйте голосом вашу еду (например: *'3 яйца, 80г макарон, 20г бекона'*)."
+                    elif text in ["👨‍💼 Технический таск", "/task"]:
+                        reply = "👨‍💼 **Режим технической задачи Тимлиду**\n\nОпишите задачу или желаемую фичу (например: *'Добавь на дашборд показатель веса 74 кг и роста 175 см'*)."
+                    elif text in ["📊 Итоги за сегодня", "/summary"]:
                         from database.db import get_today_summary
                         today = get_today_summary()
-                        reply = f"📊 **Итоги за сегодня ({today['date']})**:\n🔥 **Калории**: {today['total_calories']}/{today['goals']['calories']} ккал\n🥩 **Белки**: {today['total_protein']}g\n🥑 **Жиры**: {today['total_fat']}g\n🍚 **Углеводы**: {today['total_carbs']}g"
+                        reply = (
+                            f"📊 **Итоги за сегодня ({today['date']})**:\n\n"
+                            f"🔥 **Калории**: {int(round(today['total_calories']))} / {today['goals']['calories']} ккал\n"
+                            f"🥩 **Белки**: {int(round(today['total_protein']))}g / {today['goals']['protein_g']}g\n"
+                            f"🥑 **Жиры**: {int(round(today['total_fat']))}g / {today['goals']['fat_g']}g\n"
+                            f"🍚 **Углеводы**: {int(round(today['total_carbs']))}g / {today['goals']['carbs_g']}g"
+                            f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
+                        )
+                    elif text in ["💡 Советы ИИ-тренера", "/coach"]:
+                        from agents.coach_agent import coach_agent
+                        analysis = coach_agent.analyze()
+                        recs = analysis.get("recommendations", [])
+                        lines = [f"💡 **[{r['severity'].upper()}]** {r['message']}" for r in recs]
+                        body = "\n\n".join(lines) if lines else "💡 Советы формируются на основе вашего ежедневного рациона."
+                        reply = body + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
                     else:
                         reply = process_user_meal_input(text, input_type="webhook")
+
                     send_telegram_message(token, chat_id, reply)
 
             self.send_response(200)
