@@ -2,6 +2,7 @@ import urllib.request
 import urllib.parse
 import json
 from typing import List, Dict, Any
+from database.db import get_custom_product
 
 # Built-in Reference Database per 100g
 NUTRITION_DATABASE: Dict[str, Dict[str, float]] = {
@@ -95,6 +96,11 @@ class NutritionAgent:
                     break
 
             if not matched_info:
+                # 2. Check custom products from DB
+                matched_info = get_custom_product(p_name)
+
+            if not matched_info:
+                # 3. Fallback to OpenFoodFacts
                 matched_info = fetch_openfoodfacts_nutrition(p_name)
 
             ratio = qty_g / 100.0

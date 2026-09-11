@@ -58,6 +58,7 @@ def start_bot():
         # ── Mode keys stored in context.user_data ────────────────────────
         MODE_FOOD = "food"
         MODE_TASK = "task"
+        MODE_ADD_PRODUCT = "add_product"
 
         def get_mode(ctx):
             return ctx.user_data.get("mode")
@@ -196,14 +197,64 @@ def start_bot():
 
         # ── Photo handler ─────────────────────────────────────────────────
         async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            await update.message.reply_text("📷 Фото получено! ИИ анализирует блюдо...")
+            mode = get_mode(context)
+            await update.message.reply_text("📷 Фото получено! ИИ обрабатывает...")
             try:
                 photo_file = await update.message.photo[-1].get_file()
-                image_bytes = await photo_file.download_as_bytearray()
+                image_bytes = bytes(await photo_file.download_as_bytearray())
                 caption = update.message.caption or ""
                 
-                response = process_user_meal_input(caption, input_type="photo", image_bytes=bytes(image_bytes))
-                await update.message.reply_markdown(f"📷 **Фото блюда обработано!**\n\n{response}")
+                if mode == MODE_ADD_PRODUCT:
+                    # Send to Gemini to extract product data
+                    from google import genai
+                    from google.genai import types
+                    import json
+                    from database.db import save_custom_product
+                    
+                    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+                    sys_prompt = "Извлеки название продукта и КБЖУ на 100 грамм из изображения. Верни ТОЛЬКО JSON формата: {\"product_name\": \"string\", \"calories_100g\": float, \"protein_100g\": float, \"fat_100g\": float, \"carbs_100g\": float}."
+                    
+                    resp = client.models.generate_content(
+                        model=os.getenv("GEMINI_MODEL", "gemini-3.6-flash"),
+                        contents=[
+                            types.Content(role="user", parts=[types.Part.from_text(text=sys_prompt)]),
+                            types.Content(role="model", parts=[types.Part.from_text(text="Understood. I will return only valid JSON without markdown blocks.")]),
+                            types.Content(role="user", parts=[
+                                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                                types.Part.from_text(text="Extract product nutrition info per 100g")
+                            ]),
+                        ],
+                        config=types.GenerateContentConfig(temperature=0.0)
+                    )
+                    
+                    text_resp = resp.text
+                    if "```json" in text_resp:
+                        text_resp = text_resp.split("```json")[1].split("```")[0]
+                    elif "```" in text_resp:
+                        text_resp = text_resp.split("```")[1].split("```")[0]
+                    text_resp = text_resp.strip()
+                    
+                    data = json.loads(text_resp)
+                    save_custom_product(
+                        data["product_name"],
+                        float(data["calories_100g"]),
+                        float(data["protein_100g"]),
+                        float(data["fat_100g"]),
+                        float(data["carbs_100g"])
+                    )
+                    set_mode(context, None)
+                    await update.message.reply_markdown(
+                        f"✅ **Продукт добавлен в базу!**\n\n"
+                        f"📦 Название: `{data['product_name']}`\n"
+                        f"🔥 Калории: {data['calories_100g']} ккал/100г\n"
+                        f"🥩 Белки: {data['protein_100g']} г/100г\n"
+                        f"🥑 Жиры: {data['fat_100g']} г/100г\n"
+                        f"🍚 Углеводы: {data['carbs_100g']} г/100г",
+                        reply_markup=main_keyboard
+                    )
+                else:
+                    response = process_user_meal_input(caption, input_type="photo", image_bytes=image_bytes)
+                    await update.message.reply_markdown(f"📷 **Фото блюда обработано!**\n\n{response}", reply_markup=main_keyboard)
             except Exception as e:
                 logger.error(f"Photo error: {e}")
                 await update.message.reply_text(f"⚠️ Ошибка при обработке фото: {e}")
