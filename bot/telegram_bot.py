@@ -1,6 +1,11 @@
 import os
+import sys
 import logging
+from pathlib import Path
 from typing import Dict, Any
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agents.ingestion_agent import ingestion_agent
 from agents.nutrition_agent import nutrition_agent
