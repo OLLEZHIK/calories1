@@ -1,11 +1,14 @@
+import os
 import re
+import json
+import urllib.request
 from typing import List, Dict, Any
 
 class IngestionAgent:
     """
-    Agent 1: Ingestion & Structuring Agent
-    Converts raw text, voice transcripts, or photo captions into structured meal ingredient items
-    AND detects product price entries (e.g. '500г макарон стоят 1.50€').
+    Agent 1: Ingestion & LLM Structuring Agent
+    Uses LLM (Groq / Gemini) to extract normalized product names and quantities in grams 
+    from freeform Russian text or voice transcripts, with a robust regex fallback parser.
     """
     def __init__(self):
         self.name = "IngestionAgent"
@@ -14,9 +17,7 @@ class IngestionAgent:
         """
         Detects if user is logging a product price, e.g.:
         '500г макарон стоят 1.5€' or 'творог 200г 120 руб' or 'курица 1кг 4 евро'
-        Returns price dictionary or None.
         """
-        # Look for currency symbols or words: €, $, евро, euro, руб, р, rub
         price_match = re.search(
             r'(\d+[\.,]?\d*)\s*(€|\$|евро|euro|руб|рублей|р|rub)', 
             raw_input, 
@@ -28,7 +29,6 @@ class IngestionAgent:
         price_val = float(price_match.group(1).replace(',', '.'))
         currency = price_match.group(2).lower()
 
-        # Look for weight (500g, 1kg, 200 грамм)
         weight_match = re.search(
             r'(\d+[\.,]?\d*)\s*(г|гр|грамм|г.|g|кг|kg|шт|штук)?', 
             raw_input, 
@@ -43,7 +43,6 @@ class IngestionAgent:
             elif w_val > 0 and w_val != price_val:
                 weight_g = w_val
 
-        # Clean product name by stripping price and weight terms
         cleaned_name = re.sub(
             r'(\d+[\.,]?\d*)\s*(€|\$|евро|euro|руб|рублей|р|rub|стоят|стоимость|цена|за|г|гр|грамм|г.|g|кг|kg)', 
             '', 
@@ -62,13 +61,72 @@ class IngestionAgent:
             "price_per_100g": round((price_val / weight_g) * 100, 3)
         }
 
+    def _parse_llm(self, raw_input: str) -> List[Dict[str, Any]]:
+        """Uses LLM (Groq / Gemini) to extract food items and weight in grams."""
+        groq_key = os.getenv("GROQ_API_KEY", "").strip() or os.getenv("SPEECH_API_KEY", "").strip()
+        if not groq_key or not groq_key.startswith("gsk_"):
+            return []
+
+        sys_prompt = (
+            "Ты — ИИ-нутрициолог. Извлеки список всех продуктов и их массу из описания еды на русском языке.\n"
+            "Верни ТОЛЬКО валидный JSON объект формата:\n"
+            '{"items": [{"product_name": "название продукта", "quantity_g": число_в_граммах}]}\n'
+            "Пример перевода: 1 яйцо = 55г, 1 стакан = 250г, 1 ст.л = 20г, 1 порция = 200г, 1 шт = 100г.\n"
+            "Не добавляй никакой другой текст вне JSON."
+        )
+
+        payload = {
+            "model": "openai/gpt-oss-20b",
+            "messages": [
+                {"role": "system", "content": sys_prompt},
+                {"role": "user", "content": raw_input}
+            ],
+            "max_tokens": 350,
+            "response_format": {"type": "json_object"}
+        }
+
+        req = urllib.request.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=json.dumps(payload).encode('utf-8'),
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CaloriesAI/1.0"
+            },
+            method="POST"
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                content = data["choices"][0]["message"]["content"]
+                parsed = json.loads(content)
+                items = parsed.get("items", [])
+                result = []
+                for item in items:
+                    name = item.get("product_name", "").strip()
+                    qty = float(item.get("quantity_g", 100.0))
+                    if name and qty > 0:
+                        result.append({"product_name": name, "quantity_g": qty, "explicit_kcal": None})
+                return result
+        except Exception as e:
+            print(f"LLM Ingestion parse warning: {e}")
+            return []
+
     def parse(self, raw_input: str) -> List[Dict[str, Any]]:
         """
-        Parses input string into a list of dictionaries with product_name, quantity_g, and explicit macros if given.
+        Parses raw text/speech input into structured food items.
+        Tries LLM parsing first, falls back to regex matching.
         """
         if not raw_input or not raw_input.strip():
             return []
 
+        # 1. Try LLM Parsing
+        llm_items = self._parse_llm(raw_input)
+        if llm_items:
+            return llm_items
+
+        # 2. Fallback Regex Parsing
         items = []
         parts = re.split(r'[,;\n\+]|\bи\b|\band\b', raw_input, flags=re.IGNORECASE)
 
@@ -77,12 +135,7 @@ class IngestionAgent:
             if not part:
                 continue
 
-            # Check if explicit macros are given e.g. "творог 200г (150ккал, 30g белков)"
             explicit_kcal = None
-            explicit_p = None
-            explicit_f = None
-            explicit_c = None
-
             kcal_match = re.search(r'(\d+[\.,]?\d*)\s*(ккал|kcal|калорий)', part, re.IGNORECASE)
             if kcal_match:
                 explicit_kcal = float(kcal_match.group(1).replace(',', '.'))
@@ -124,3 +177,4 @@ class IngestionAgent:
         return items
 
 ingestion_agent = IngestionAgent()
+
