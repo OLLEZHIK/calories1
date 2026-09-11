@@ -10,6 +10,7 @@ import urllib.parse
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bot.telegram_bot import process_user_meal_input
+from agents.audio_agent import audio_agent
 
 def send_telegram_message(token: str, chat_id: int, text: str):
     """Sends reply back to Telegram user via Telegram Bot API."""
@@ -26,14 +27,9 @@ def send_telegram_message(token: str, chat_id: int, text: str):
     except Exception as e:
         print(f"Error sending Telegram message: {e}")
 
-def transcribe_telegram_voice(token: str, file_id: str) -> str:
-    """Downloads voice message from Telegram API and transcribes it via OpenAI Whisper if API key is present."""
-    openai_key = os.getenv("OPENAI_API_KEY", "")
-    if not openai_key:
-        return ""
-
+def get_telegram_voice_bytes(token: str, file_id: str) -> bytes:
+    """Downloads voice message bytes from Telegram API."""
     try:
-        # Get file path from Telegram
         get_file_url = f"https://api.telegram.org/bot{token}/getFile?file_id={file_id}"
         req = urllib.request.Request(get_file_url)
         with urllib.request.urlopen(req) as resp:
@@ -41,38 +37,15 @@ def transcribe_telegram_voice(token: str, file_id: str) -> str:
             file_path = data.get("result", {}).get("file_path")
 
         if not file_path:
-            return ""
+            return b""
 
-        # Download voice file
         download_url = f"https://api.telegram.org/file/bot{token}/{file_path}"
         voice_req = urllib.request.Request(download_url)
         with urllib.request.urlopen(voice_req) as resp:
-            voice_bytes = resp.read()
-
-        # Send to OpenAI Whisper Transcribe API
-        boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
-        body = bytearray()
-        body.extend(f"--{boundary}\r\n".encode('utf-8'))
-        body.extend(b'Content-Disposition: form-data; name="file"; filename="voice.ogg"\r\n')
-        body.extend(b'Content-Type: audio/ogg\r\n\r\n')
-        body.extend(voice_bytes)
-        body.extend(b'\r\n')
-        body.extend(f"--{boundary}\r\n".encode('utf-8'))
-        body.extend(b'Content-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n')
-        body.extend(f"--{boundary}--\r\n".encode('utf-8'))
-
-        headers = {
-            "Authorization": f"Bearer {openai_key}",
-            "Content-Type": f"multipart/form-data; boundary={boundary}"
-        }
-        whisper_req = urllib.request.Request("https://api.openai.com/v1/audio/transcriptions", data=bytes(body), headers=headers, method="POST")
-        with urllib.request.urlopen(whisper_req) as resp:
-            res_data = json.loads(resp.read().decode('utf-8'))
-            return res_data.get("text", "")
-
+            return resp.read()
     except Exception as e:
-        print(f"Voice Transcription Error: {e}")
-        return ""
+        print(f"Error downloading Telegram voice file: {e}")
+        return b""
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -91,16 +64,21 @@ class handler(BaseHTTPRequestHandler):
             if chat_id:
                 if voice:
                     file_id = voice.get("file_id")
-                    transcription = transcribe_telegram_voice(token, file_id) if file_id else ""
+                    voice_bytes = get_telegram_voice_bytes(token, file_id) if file_id else b""
+                    
+                    # Call free AudioTranscriptionAgent
+                    transcription = audio_agent.transcribe(voice_bytes) if voice_bytes else ""
+
                     if transcription:
-                        reply = f"🎤 **Распознанный голос**: '{transcription}'\n\n" + process_user_meal_input(transcription, input_type="voice")
+                        reply = f"🎤 **Агент-распознаватель голоса (AudioAgent)**:\n*\"{transcription}\"*\n\n" + process_user_meal_input(transcription, input_type="voice")
                     else:
-                        reply = "🎤 **Голосовое сообщение получено!**\nДля автоматической расшифровки аудио укажите `OPENAI_API_KEY` в файле `.env` или напишите еду текстом."
+                        reply = "🎤 **Голосовое сообщение получено!**\nАгент готов к расшифровке. Напишите надиктованный текст (например '200г бекона, 5 яиц') для записи приема пищи."
+                    
                     send_telegram_message(token, chat_id, reply)
 
                 elif text:
                     if text == "/start":
-                        reply = "👋 Привет! Я твой ИИ-ассистент по питанию (Calories AI).\nЗаписывай еду текстом или голосом!"
+                        reply = "👋 Привет! Я твой ИИ-ассистент по питанию (Calories AI).\nЗаписывай еду текстом или надиктовывай голосом!"
                     elif text == "/summary":
                         from database.db import get_today_summary
                         today = get_today_summary()
