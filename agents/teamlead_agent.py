@@ -52,6 +52,45 @@ class TeamLeadAgent:
     def __init__(self):
         self.name = "TeamLeadAgent"
 
+    def _classify_intent_llm(self, text: str) -> str | None:
+        """
+        Uses Gemini 2.0 Flash to classify user intent.
+        Returns one of: 'food' | 'task' | 'summary' | 'coach' | None (uncertain)
+        Falls back to None if no Gemini key — keyword matching takes over.
+        """
+        gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not gemini_key:
+            return None
+        try:
+            from google import genai
+            from google.genai import types
+            client = genai.Client(api_key=gemini_key)
+            model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+            prompt = f"""Classify this Russian message into exactly one category. Reply with ONLY the category word.
+
+Categories:
+- food: user is describing food they ate (e.g. яйца, макароны, съел, поел, на завтрак/обед/ужин)
+- task: user asks a technical question, reports a bug, requests a feature, or asks "why/how" about the app
+- summary: user wants to see today's calorie/nutrition summary
+- coach: user wants diet advice or recommendations
+- price: user is logging a product price (рублей, евро, стоит)
+
+Message: "{text}"
+
+Reply with ONLY one word: food, task, summary, coach, or price"""
+
+            resp = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=10)
+            )
+            intent = (resp.text or "").strip().lower().split()[0]
+            if intent in ("food", "task", "summary", "coach", "price"):
+                return intent
+        except Exception as e:
+            print(f"Intent classification error: {e}")
+        return None
+
     def route_input(self, raw_text: str, input_type: str = "text") -> str:
         if not raw_text or not raw_text.strip():
             return "⚠️ Пустое сообщение. Напишите или надиктуйте еду (например: '200г творога, 2 яйца')."
@@ -66,26 +105,12 @@ class TeamLeadAgent:
         if any(text_lower == t for t in NON_FOOD_UI_TEXTS):
             return "👇 Нажмите одну из кнопок ниже чтобы начать."
 
-        # 1. Check if user is logging a product price (e.g., 'творог 200г 120р' or '500г макарон стоят 1.5€')
-        price_info = ingestion_agent.parse_price_entry(raw_text)
-        if price_info:
-            save_product_price(
-                product_name=price_info["product_name"],
-                price_rub=price_info["price"],
-                weight_g=price_info["weight_g"]
-            )
-            econ_stats = economy_agent.analyze_economy()
-            return (
-                f"💰 **Цена продукта записана!**\n\n"
-                f"🛒 **Продукт**: {price_info['product_name']}\n"
-                f"💵 **Стоимость**: {price_info['price']} {price_info['currency']} за {int(round(price_info['weight_g']))}g\n"
-                f"📊 **Цена за 100g**: {round(price_info['price_per_100g'], 2)} {price_info['currency']}\n\n"
-                f"📈 **Экономика рациона**: Всего отслеживается продуктов: {econ_stats.get('total_tracked_products', 0)}."
-                f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
-            )
+        # ── LLM Intent Classification (Gemini) ──────────────────────────────
+        # When GEMINI_API_KEY is set, Gemini classifies ANY natural language phrase.
+        # This replaces brittle keyword matching for the majority of inputs.
+        llm_intent = self._classify_intent_llm(raw_text)
 
-        # 2. Check if user is asking for Summary / Coach Advice
-        if any(cmd in text_lower for cmd in ["/summary", "итоги", "сколько я съел", "калории за день", "норма"]):
+        if llm_intent == "summary":
             today = get_today_summary()
             return (
                 f"📊 **Итоги за сегодня ({today['date']})**:\n\n"
@@ -96,26 +121,92 @@ class TeamLeadAgent:
                 f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
             )
 
-        if any(cmd in text_lower for cmd in ["/coach", "совет", "тренер", "рекомендации"]):
+        if llm_intent == "coach":
             analysis = coach_agent.analyze()
             recs = analysis.get("recommendations", [])
             lines = [f"💡 **[{r['severity'].upper()}]** {r['message']}" for r in recs]
             body = "\n\n".join(lines) if lines else "💡 Советы формируются на основе вашего ежедневного рациона."
             return body + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
 
-        # 3. Check if user is requesting a system feature / task / body metric update for TeamLead
-        if any(w in text_lower for w in [
-            "добавь фичу", "сожг", "тренировка", "активные калории", "трекер", "дашборд", "даш борд", 
-            "мобильн", "оптимизир", "верстк", "дизайн", "интерфейс", "адаптив", "техническое задание", 
-            "тимлид", "транскриб", "отличать", "агент", "глюк", "исправь", "настрой", "проверить продукты",
-            "рост", "роста", "вес", "веса", "килограмм", "килограмма", "рост 1", "вес 7"
-        ]):
+        if llm_intent == "task":
             feature_res = self.process_feature_request(raw_text)
             return (
-                f"👨‍💼 **Тимлид принял задачу!**\n\n{feature_res['summary']}\n\nСформированы подзадачи для агентов:\n" 
-                + "\n".join([f"• [{t['agent']}]: {t['task']}" for t in feature_res.get('tasks', [])])
+                f"👨‍💼 **Тимлид принял задачу!**\n\n{feature_res['summary']}\n\nСформированы подзадачи для агентов:\n"
+                + "\n".join([f"• [{t['agent']}]: {t['task']}" for t in feature_res.get("tasks", [])])
                 + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
             )
+
+        if llm_intent == "price":
+            price_info = ingestion_agent.parse_price_entry(raw_text)
+            if price_info:
+                save_product_price(
+                    product_name=price_info["product_name"],
+                    price_rub=price_info["price"],
+                    weight_g=price_info["weight_g"]
+                )
+                econ_stats = economy_agent.analyze_economy()
+                return (
+                    f"💰 **Цена продукта записана!**\n\n"
+                    f"🛒 **Продукт**: {price_info['product_name']}\n"
+                    f"💵 **Стоимость**: {price_info['price']} {price_info['currency']} за {int(round(price_info['weight_g']))}g\n"
+                    f"📊 **Цена за 100g**: {round(price_info['price_per_100g'], 2)} {price_info['currency']}\n\n"
+                    f"📈 **Экономика рациона**: Продуктов отслеживается: {econ_stats.get('total_tracked_products', 0)}."
+                    f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
+                )
+
+        # If llm_intent == "food" OR no Gemini key — fall through to keyword + food pipeline below
+
+        # ── Keyword fallback (no GEMINI_API_KEY) ────────────────────────────
+        # 1. Check if user is logging a product price
+        if llm_intent is None:
+            price_info = ingestion_agent.parse_price_entry(raw_text)
+            if price_info:
+                save_product_price(
+                    product_name=price_info["product_name"],
+                    price_rub=price_info["price"],
+                    weight_g=price_info["weight_g"]
+                )
+                econ_stats = economy_agent.analyze_economy()
+                return (
+                    f"💰 **Цена продукта записана!**\n\n"
+                    f"🛒 **Продукт**: {price_info['product_name']}\n"
+                    f"💵 **Стоимость**: {price_info['price']} {price_info['currency']} за {int(round(price_info['weight_g']))}g\n"
+                    f"📊 **Цена за 100g**: {round(price_info['price_per_100g'], 2)} {price_info['currency']}\n\n"
+                    f"📈 **Экономика рациона**: Продуктов отслеживается: {econ_stats.get('total_tracked_products', 0)}."
+                    f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
+                )
+
+            if any(cmd in text_lower for cmd in ["/summary", "итоги", "сколько я съел", "калории за день", "норма"]):
+                today = get_today_summary()
+                return (
+                    f"📊 **Итоги за сегодня ({today['date']})**:\n\n"
+                    f"🔥 **Калории**: {int(round(today['total_calories']))} / {today['goals']['calories']} ккал\n"
+                    f"🥩 **Белки**: {int(round(today['total_protein']))}g / {today['goals']['protein_g']}g\n"
+                    f"🥑 **Жиры**: {int(round(today['total_fat']))}g / {today['goals']['fat_g']}g\n"
+                    f"🍚 **Углеводы**: {int(round(today['total_carbs']))}g / {today['goals']['carbs_g']}g"
+                    f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
+                )
+
+            if any(cmd in text_lower for cmd in ["/coach", "совет", "тренер", "рекомендации"]):
+                analysis = coach_agent.analyze()
+                recs = analysis.get("recommendations", [])
+                lines = [f"💡 **[{r['severity'].upper()}]** {r['message']}" for r in recs]
+                body = "\n\n".join(lines) if lines else "💡 Советы формируются на основе вашего ежедневного рациона."
+                return body + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
+
+            if any(w in text_lower for w in [
+                "добавь фичу", "почему", "тренировка", "активные калории", "трекер", "дашборд",
+                "мобильн", "оптимизир", "верстк", "дизайн", "интерфейс", "адаптив", "техническое задание",
+                "тимлид", "транскриб", "отличать", "агент", "глюк", "исправь", "настрой",
+                "не работает", "не заполняется", "задачу", "задача", "отправь",
+                "рост", "роста", "вес", "веса", "килограмм", "килограмма"
+            ]):
+                feature_res = self.process_feature_request(raw_text)
+                return (
+                    f"👨‍💼 **Тимлид принял задачу!**\n\n{feature_res['summary']}\n\nСформированы подзадачи для агентов:\n"
+                    + "\n".join([f"• [{t['agent']}]: {t['task']}" for t in feature_res.get("tasks", [])])
+                    + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
+                )
 
         # 4. Multi-Meal Processing Pipeline (Supports multiple meals dictated in one audio message)
         llm_meals = ingestion_agent._parse_llm(raw_text)

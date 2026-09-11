@@ -37,3 +37,10 @@ DEFAULT_GOALS = {
     "fat_g": 70,
     "carbs_g": 230
 }
+
+# ── Gemini / Google AI Studio ─────────────────────────────────────────────────
+GEMINI_API_KEY   = os.getenv("GEMINI_API_KEY", "").strip()
+# Primary model: fast, cheap, multimodal — used by all LLM agents
+GEMINI_MODEL     = os.getenv("GEMINI_MODEL",   "gemini-2.0-flash")
+# Audio model: natively understands OGG/Opus voice messages
+GEMINI_AUDIO_MODEL = os.getenv("GEMINI_AUDIO_MODEL", "gemini-1.5-flash")
