@@ -98,10 +98,10 @@ class NutritionAgent:
                 matched_info = fetch_openfoodfacts_nutrition(p_name)
 
             ratio = qty_g / 100.0
-            cal = int(round(matched_info["calories"] * ratio))
-            prot = int(round(matched_info["protein"] * ratio))
-            fat = int(round(matched_info["fat"] * ratio))
-            carbs = int(round(matched_info["carbs"] * ratio))
+            cal = int(round(item["explicit_kcal"])) if item.get("explicit_kcal") is not None else int(round(matched_info["calories"] * ratio))
+            prot = int(round(item["explicit_protein"])) if item.get("explicit_protein") is not None else int(round(matched_info["protein"] * ratio))
+            fat = int(round(item["explicit_fat"])) if item.get("explicit_fat") is not None else int(round(matched_info["fat"] * ratio))
+            carbs = int(round(item["explicit_carbs"])) if item.get("explicit_carbs") is not None else int(round(matched_info["carbs"] * ratio))
 
             calculated_items.append({
                 "product_name": item.get("product_name"),

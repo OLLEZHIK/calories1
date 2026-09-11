@@ -62,28 +62,47 @@ class IngestionAgent:
         }
 
     def _parse_llm(self, raw_input: str) -> List[Dict[str, Any]]:
-        """Uses LLM (Groq / Gemini) to extract food items and weight in grams."""
+        """Uses LLM (Groq) to extract multi-meal items, filtering out conversational filler and self-corrections."""
         groq_key = os.getenv("GROQ_API_KEY", "").strip() or os.getenv("SPEECH_API_KEY", "").strip()
         if not groq_key or not groq_key.startswith("gsk_"):
             return []
 
-        sys_prompt = (
-            "Ты — ИИ-нутрициолог. Извлеки список всех продуктов и их массу из описания еды на русском языке.\n"
-            "Верни ТОЛЬКО валидный JSON объект формата:\n"
-            '{"items": [{"product_name": "название продукта", "quantity_g": число_в_граммах}]}\n'
-            "Пример перевода: 1 яйцо = 55г, 1 стакан = 250г, 1 ст.л = 20г, 1 порция = 200г, 1 шт = 100г.\n"
-            "Не добавляй никакой другой текст вне JSON."
-        )
+        sys_prompt = """You are a nutrition extraction AI. Analyze transcribed voice input about food in Russian.
+Your task is to return a valid JSON object with key "meals": a list of meal objects.
+
+RULES:
+1. Ignore conversational filler words, self-corrections, questions ("Смотри", "ой не 9 а 19", "и что еще?", "белки там").
+2. If the user mentions multiple meals in one voice note (e.g. "на завтрак..." AND "сейчас на обед..."), split them into separate meal objects with "meal_type": ("Завтрак", "Обед", "Ужин", "Перекус").
+3. For each food item, extract:
+   - "product_name": normalized Russian name (e.g. "куриное яйцо", "макароны", "бекон", "майонез", "сосиски", "моцарелла light", "помидор", "масло оливковое")
+   - "quantity_g": total net weight in grams (number, e.g. 3 eggs = 165g, 1 mozzarella = 125g, tomato = 50g)
+   - "explicit_kcal": total calories for item if specified, or null
+   - "explicit_protein": total protein in grams if specified, or null
+   - "explicit_fat": total fat in grams if specified, or null
+   - "explicit_carbs": total carbs in grams if specified, or null
+
+Return ONLY JSON object:
+{
+  "meals": [
+    {
+      "meal_type": "Завтрак",
+      "items": [
+        {"product_name": "куриное яйцо", "quantity_g": 165, "explicit_kcal": null, "explicit_protein": null, "explicit_fat": null, "explicit_carbs": null}
+      ]
+    }
+  ]
+}
+"""
 
         payload = {
-            "model": "openai/gpt-oss-20b",
+            "model": "groq/compound-mini",
             "messages": [
                 {"role": "system", "content": sys_prompt},
                 {"role": "user", "content": raw_input}
             ],
-            "max_tokens": 350,
-            "response_format": {"type": "json_object"}
+            "max_tokens": 800
         }
+
 
         req = urllib.request.Request(
             "https://api.groq.com/openai/v1/chat/completions",
@@ -91,27 +110,31 @@ class IngestionAgent:
             headers={
                 "Authorization": f"Bearer {groq_key}",
                 "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CaloriesAI/1.0"
+                "User-Agent": "curl/7.68.0"
             },
             method="POST"
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=8) as resp:
+            with urllib.request.urlopen(req, timeout=25) as resp:
+
                 data = json.loads(resp.read().decode('utf-8'))
-                content = data["choices"][0]["message"]["content"]
+                choice = data.get("choices", [{}])[0]
+                msg = choice.get("message", {})
+                content = msg.get("content", "") or msg.get("reasoning", "")
+                
+                # Robustly find JSON object { ... } inside response
+                json_match = re.search(r'(\{[\s\S]*\})', content)
+                if json_match:
+                    parsed = json.loads(json_match.group(1))
+                    return parsed.get("meals", [])
+                
                 parsed = json.loads(content)
-                items = parsed.get("items", [])
-                result = []
-                for item in items:
-                    name = item.get("product_name", "").strip()
-                    qty = float(item.get("quantity_g", 100.0))
-                    if name and qty > 0:
-                        result.append({"product_name": name, "quantity_g": qty, "explicit_kcal": None})
-                return result
+                return parsed.get("meals", [])
         except Exception as e:
             print(f"LLM Ingestion parse warning: {e}")
             return []
+
 
     def parse(self, raw_input: str) -> List[Dict[str, Any]]:
         """
@@ -122,9 +145,13 @@ class IngestionAgent:
             return []
 
         # 1. Try LLM Parsing
-        llm_items = self._parse_llm(raw_input)
-        if llm_items:
-            return llm_items
+        llm_meals = self._parse_llm(raw_input)
+        if llm_meals:
+            all_items = []
+            for m in llm_meals:
+                all_items.extend(m.get("items", []))
+            if all_items:
+                return all_items
 
         # 2. Fallback Regex Parsing
         items = []
@@ -175,6 +202,7 @@ class IngestionAgent:
             })
 
         return items
+
 
 ingestion_agent = IngestionAgent()
 

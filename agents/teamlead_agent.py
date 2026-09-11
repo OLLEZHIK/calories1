@@ -104,57 +104,72 @@ class TeamLeadAgent:
                 + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
             )
 
-        # 4. Detect Meal Category (Breakfast, Lunch, Dinner, Snack)
-        meal_type = detect_meal_type(raw_text)
-        meal_icon = "🍳" if meal_type == "Завтрак" else ("🍲" if meal_type == "Обед" else ("🌙" if meal_type == "Ужин" else "🍎"))
+        # 4. Multi-Meal Processing Pipeline (Supports multiple meals dictated in one audio message)
+        llm_meals = ingestion_agent._parse_llm(raw_text)
+        
+        # If LLM didn't return multi-meal array, build single meal fallback structure
+        if not llm_meals:
+            parsed_items = ingestion_agent.parse(raw_text)
+            if not parsed_items:
+                return "⚠️ Не удалось распознать продукты. Напишите или надиктуйте в формате: '200г творога, 2 яйца, стакан молока'."
+            meal_type = detect_meal_type(raw_text)
+            llm_meals = [{"meal_type": meal_type, "items": parsed_items}]
 
-        # Step 1: Ingestion Agent (LLM product & weight extraction)
-        parsed_items = ingestion_agent.parse(raw_text)
-        if not parsed_items:
-            return "⚠️ Не удалось распознать продукты. Напишите или надиктуйте в формате: '200г творога, 2 яйца, стакан молока'."
+        saved_meal_responses = []
 
-        # Step 2: Nutrition Agent (Calculate macros P/F/C/Calories)
-        calculated_items = nutrition_agent.calculate(parsed_items)
+        for m_data in llm_meals:
+            m_type = m_data.get("meal_type") or detect_meal_type(raw_text)
+            raw_items = m_data.get("items", [])
+            if not raw_items:
+                continue
 
-        # Step 3: Auditor Agent (Audit macro math & sanity checks)
-        audited_items = auditor_agent.audit(calculated_items)
+            # Step 2: Nutrition Agent (Calculate macros P/F/C/Calories)
+            calculated_items = nutrition_agent.calculate(raw_items)
 
-        # Step 4: Database Agent (Persist meal entry with meal_type)
-        meal_id = save_meal(raw_input=raw_text, input_type=input_type, items=audited_items, meal_type=meal_type)
+            # Step 3: Auditor Agent (Audit macro math & sanity checks)
+            audited_items = auditor_agent.audit(calculated_items)
 
-        # Step 5: Coach Agent (Evaluate nutritional balance)
+            # Step 4: Database Agent (Persist meal entry with meal_type)
+            meal_id = save_meal(raw_input=raw_text, input_type=input_type, items=audited_items, meal_type=m_type)
+
+            m_icon = "🍳" if m_type == "Завтрак" else ("🍲" if m_type == "Обед" else ("🌙" if m_type == "Ужин" else "🍎"))
+            total_cal = int(round(sum(i["calories"] for i in audited_items)))
+            total_p = int(round(sum(i["protein_g"] for i in audited_items)))
+            total_f = int(round(sum(i["fat_g"] for i in audited_items)))
+            total_c = int(round(sum(i["carbs_g"] for i in audited_items)))
+
+            item_lines = []
+            for item in audited_items:
+                p_val = int(round(item['protein_g']))
+                f_val = int(round(item['fat_g']))
+                c_val = int(round(item['carbs_g']))
+                cal_val = int(round(item['calories']))
+                g_val = int(round(item['quantity_g']))
+                item_lines.append(f"• {item['product_name']} ({g_val}g): {cal_val} ккал | Б:{p_val}g | Ж:{f_val}g | У:{c_val}g")
+
+            saved_meal_responses.append(
+                f"{m_icon} **{m_type.upper()} записан!** (Запись #{meal_id})\n"
+                + "\n".join(item_lines) + "\n"
+                + f"🔥 **Сумма**: {total_cal} ккал | Б: {total_p}g | Ж: {total_f}g | У: {total_c}g"
+            )
+
+        if not saved_meal_responses:
+            return "⚠️ Не удалось записать продукты из вашего сообщения."
+
+        # Step 5 & 6: Coach & Dashboard sync
         coach_agent.analyze()
-
-        # Step 6: Dashboard Agent (Update HTML Web Dashboard)
         dashboard_agent.render()
-
-        # Format Telegram Response with integer rounding
-        total_cal = int(round(sum(i["calories"] for i in audited_items)))
-        total_p = int(round(sum(i["protein_g"] for i in audited_items)))
-        total_f = int(round(sum(i["fat_g"] for i in audited_items)))
-        total_c = int(round(sum(i["carbs_g"] for i in audited_items)))
-
-        item_lines = []
-        for item in audited_items:
-            p_val = int(round(item['protein_g']))
-            f_val = int(round(item['fat_g']))
-            c_val = int(round(item['carbs_g']))
-            cal_val = int(round(item['calories']))
-            g_val = int(round(item['quantity_g']))
-            item_lines.append(f"• {item['product_name']} ({g_val}g): {cal_val} ккал | Б:{p_val}g | Ж:{f_val}g | У:{c_val}g")
-
         today = get_today_summary()
 
         response = (
-            f"{meal_icon} **{meal_type.upper()} записан!** (Запись #{meal_id})\n\n"
-            + "\n".join(item_lines) + "\n\n"
-            + f"🔥 **Сумма за прием**: {total_cal} ккал | Б: {total_p}g | Ж: {total_f}g | У: {total_c}g\n\n"
+            "\n\n".join(saved_meal_responses) + "\n\n"
             + f"📊 **Всего за день**: {int(round(today['total_calories']))}/{today['goals']['calories']} ккал "
             + f"(Б: {int(round(today['total_protein']))}g / Ж: {int(round(today['total_fat']))}g / У: {int(round(today['total_carbs']))}g)"
             + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
         )
 
         return response
+
 
 
     def process_feature_request(self, user_prompt: str) -> Dict[str, Any]:
