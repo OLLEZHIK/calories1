@@ -70,20 +70,26 @@ a{color:inherit}
 .rule-mid{height:3px; background:var(--rule); border:0; margin:0}
 .rule-hair{height:1px; background:var(--hair); border:0; margin:0}
 
-/* ---------- day strip ---------- */
+/* ---------- day strip / calendar ---------- */
 .daystrip{display:flex; gap:6px; overflow-x:auto; padding:14px 0 16px; scrollbar-width:thin; -webkit-overflow-scrolling:touch}
 .chip{
   flex:0 0 auto; min-width:62px; padding:7px 9px 8px; border:1px solid var(--hair);
   background:var(--panel); color:var(--ink-2); cursor:pointer; text-align:left;
-  font-family:"Golos Text",sans-serif; font-size:12px; line-height:1.25; border-radius:2px;
+  font-family:"Golos Text",sans-serif; font-size:12px; line-height:1.25; border-radius:4px;
   transition:border-color .12s ease, background .12s ease;
 }
 .chip:hover{border-color:var(--ink-3)}
 .chip .cd{display:block; font-weight:600; color:var(--ink)}
 .chip .ck{display:block; font-family:"JetBrains Mono",monospace; font-size:10.5px; color:var(--ink-3); margin-top:2px}
-.chip[aria-pressed="true"]{background:var(--ink); border-color:var(--ink)}
-.chip[aria-pressed="true"] .cd,.chip[aria-pressed="true"] .ck{color:var(--paper)}
-.chip .dot{display:inline-block; width:5px; height:5px; border-radius:50%; margin-left:4px; vertical-align:1px}
+.chip.active{background:var(--ink); border-color:var(--ink)}
+.chip.active .cd,.chip.active .ck{color:var(--paper)}
+
+/* ---------- histogram ---------- */
+.histogram{display:flex; align-items:flex-end; gap:8px; height:100px; padding:10px 0 20px; border-bottom:1px solid var(--hair); margin-bottom:20px;}
+.bar-wrap{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative;}
+.bar{width:100%; max-width:30px; background:var(--p); border-radius:4px 4px 0 0; min-height:4px; transition:height 0.3s ease;}
+.bar.over{background:var(--warn);}
+.bar-lbl{position:absolute; bottom:-18px; font-size:10px; font-family:"JetBrains Mono"; color:var(--ink-3);}
 
 /* ---------- panels ---------- */
 .grid-top{display:grid; grid-template-columns:minmax(0,1.02fr) minmax(0,1fr); gap:20px; align-items:start; margin-top:4px}
@@ -108,7 +114,7 @@ a{color:inherit}
 .dial-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:1px}
 .dial-center .big{font-size:42px; line-height:1; letter-spacing:-.02em}
 .dial-center .of{font-size:12px; color:var(--ink-2)}
-.dial-meta{flex:1 1 170px; min-width:160px; display:flex; flex-direction:column; gap:10px}
+.dial-meta{flex:1 1 170px; min-width:160px; display:flex; flex-direction:column; gap:8px}
 @media (max-width:540px){
   .dial-meta{align-items:center; width:100%}
 }
@@ -123,7 +129,7 @@ a{color:inherit}
 .pill.good{background:var(--good-bg); color:var(--good); border-color:color-mix(in srgb,var(--good) 30%,transparent)}
 .pill.warn{background:var(--warn-bg); color:var(--warn); border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
 .pill.crit{background:var(--crit-bg); color:var(--crit); border-color:color-mix(in srgb,var(--crit) 30%,transparent)}
-.kv{display:grid; grid-template-columns:1fr auto; gap:5px 12px; font-size:13px; width:100%}
+.kv{display:grid; grid-template-columns:1fr auto; gap:4px 12px; font-size:13px; width:100%}
 .kv dt{color:var(--ink-2); text-align:left}
 .kv dd{margin:0; font-family:Oswald,sans-serif; font-variant-numeric:tabular-nums; font-weight:500; text-align:right}
 
@@ -170,21 +176,6 @@ a{color:inherit}
 .sect{margin-top:32px}
 .sect-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-bottom:8px}
 .sect-head h2{font-size:18px; text-transform:uppercase}
-
-/* ---------- mobile navbar ---------- */
-.mobile-nav{
-  display:none; position:fixed; bottom:0; left:0; right:0; background:var(--panel);
-  border-top:1px solid var(--hair); padding:8px 12px; z-index:100; justify-content:space-around;
-  box-shadow:0 -2px 10px rgba(0,0,0,0.1);
-}
-@media (max-width:768px){
-  .mobile-nav{display:flex}
-}
-.mobile-nav button{
-  background:none; border:none; color:var(--ink-2); font-family:"Golos Text",sans-serif;
-  font-size:11px; display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer;
-}
-.mobile-nav button.active{color:var(--p); font-weight:600}
 </style>
 </head>
 <body>
@@ -201,6 +192,16 @@ a{color:inherit}
     </div>
   </header>
   <hr class="rule-heavy">
+
+  <!-- Day Strip Calendar -->
+  <div class="daystrip" id="daystrip-container">
+    <!-- Populated by JS -->
+  </div>
+  
+  <!-- Histogram -->
+  <div class="histogram" id="histogram-container">
+    <!-- Populated by JS -->
+  </div>
 
   <div class="grid-top">
     <!-- Day Summary -->
@@ -225,7 +226,9 @@ a{color:inherit}
           <div class="dial-meta">
             <span class="pill good" id="status-pill"><i class="sq" style="background:var(--good)"></i><span id="pill-text">В норме</span></span>
             <dl class="kv">
+              <dt>Вес:</dt><dd id="kv-weight">80кг (Цель: 75кг)</dd>
               <dt>Осталось:</dt><dd id="kv-left">2200 ккал</dd>
+              <dt>Активность:</dt><dd id="kv-active" style="color:var(--f)">0 ккал</dd>
               <dt>Белки:</dt><dd id="kv-p">0g / 160g</dd>
               <dt>Жиры:</dt><dd id="kv-f">0g / 70g</dd>
               <dt>Углеводы:</dt><dd id="kv-c">0g / 230g</dd>
@@ -297,83 +300,109 @@ a{color:inherit}
   <div class="sect">
     <div class="sect-head">
       <h2>Приемы пищи</h2>
-      <span class="eyebrow">Завтрак / Обед / Ужин / Перекус</span>
+      <span class="eyebrow">Режим питания</span>
     </div>
     <hr class="rule-heavy">
 
     <div class="meals" id="meals-container">
-      <div class="mealcard">
-        <div class="mc-head">
-          <span class="mc-name">Прием пищи</span>
-          <span class="mc-time">Загрузка...</span>
-        </div>
-        <div class="mc-sum">
-          <span class="mc-k">0<small>ккал</small></span>
-        </div>
-        <ul>
-          <li><span class="nm">Загрузка данных...</span></li>
-        </ul>
+      <!-- 4 Static Blocks -->
+      <div class="mealcard" id="meal-breakfast" style="border-top-color:var(--f)">
+        <div class="mc-head"><span class="mc-name" style="color:var(--f)">🍳 Завтрак</span></div>
+        <div class="mc-sum"><span class="mc-k">0<small>ккал</small></span></div><ul></ul>
       </div>
-    </div>
-  </div>
-
-  <!-- User Products Knowledge Base & AI Efficiency Index -->
-  <div class="sect">
-    <div class="sect-head">
-      <h2>База продуктов и Коэффициент полезности ИИ</h2>
-      <span class="eyebrow">Формируется автоматически на основе вашего рациона</span>
-    </div>
-    <hr class="rule-heavy">
-
-    <div class="panel" style="margin-top:14px; overflow-x:auto">
-      <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13.5px">
-        <thead>
-          <tr style="border-bottom:2px solid var(--hair); background:var(--panel-2)">
-            <th style="padding:10px 14px">ПРОДУКТ</th>
-            <th style="padding:10px 14px">НА 100г</th>
-            <th style="padding:10px 14px">БЕЛКИ (Б)</th>
-            <th style="padding:10px 14px">ЖИРЫ (Ж)</th>
-            <th style="padding:10px 14px">УГЛЕВОДЫ (У)</th>
-            <th style="padding:10px 14px">ЦЕНА ЗА 100г</th>
-            <th style="padding:10px 14px">ПОЛЕЗНОСТЬ ИИ</th>
-          </tr>
-        </thead>
-        <tbody id="products-table-body">
-          <tr>
-            <td colspan="7" style="padding:16px 14px; color:var(--ink-3)">Загрузка базы продуктов...</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="mealcard" id="meal-lunch" style="border-top-color:var(--p)">
+        <div class="mc-head"><span class="mc-name" style="color:var(--p)">🍲 Обед</span></div>
+        <div class="mc-sum"><span class="mc-k">0<small>ккал</small></span></div><ul></ul>
+      </div>
+      <div class="mealcard" id="meal-dinner" style="border-top-color:var(--c)">
+        <div class="mc-head"><span class="mc-name" style="color:var(--c)">🌙 Ужин</span></div>
+        <div class="mc-sum"><span class="mc-k">0<small>ккал</small></span></div><ul></ul>
+      </div>
+      <div class="mealcard" id="meal-snack" style="border-top-color:var(--warn)">
+        <div class="mc-head"><span class="mc-name" style="color:var(--warn)">🍎 Перекусы</span></div>
+        <div class="mc-sum"><span class="mc-k">0<small>ккал</small></span></div><ul></ul>
+      </div>
     </div>
   </div>
 
 </div>
 
 <script>
-async function loadLiveDashboard() {
+let currentDate = new Date().toISOString().split('T')[0];
+
+async function loadLiveDashboard(dateParam = null) {
+  if (dateParam) currentDate = dateParam;
   try {
-    const res = await fetch('/api/summary');
+    const res = await fetch(`/api/summary?date=${currentDate}`);
     if (res.ok) {
       const data = await res.json();
       updateUI(data);
-    } else {
-      updateUI(getFallbackData());
     }
   } catch (e) {
-    updateUI(getFallbackData());
+    console.error(e);
   }
+}
+
+function renderCalendarAndHistogram(historyObj, goals) {
+  const daystrip = document.getElementById('daystrip-container');
+  const histogram = document.getElementById('histogram-container');
+  
+  // Create last 7 days array
+  const days = [];
+  for(let i=6; i>=0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().split('T')[0]);
+  }
+  
+  daystrip.innerHTML = '';
+  histogram.innerHTML = '';
+  
+  const targetKcal = goals.calories || 2200;
+
+  days.forEach(d => {
+    const isToday = d === new Date().toISOString().split('T')[0];
+    const isActive = d === currentDate;
+    const dateObj = new Date(d);
+    const dayName = dateObj.toLocaleDateString('ru-RU', {weekday: 'short'});
+    const dayNum = dateObj.toLocaleDateString('ru-RU', {day: 'numeric', month: 'short'});
+    const kCals = historyObj ? (historyObj[d] || 0) : 0;
+    
+    // Calendar Chip
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (isActive ? ' active' : '');
+    chip.onclick = () => loadLiveDashboard(d);
+    chip.innerHTML = `<span class="cd">${isToday ? 'Сегодня' : dayNum}</span><span class="ck">${dayName}</span>`;
+    daystrip.appendChild(chip);
+    
+    // Histogram Bar
+    const pct = Math.min(1.0, kCals / targetKcal);
+    const height = Math.max(4, pct * 80); // max 80px
+    const barWrap = document.createElement('div');
+    barWrap.className = 'bar-wrap';
+    const isOver = kCals > targetKcal;
+    barWrap.innerHTML = `
+      <div class="bar ${isOver ? 'over' : ''}" style="height:${height}px"></div>
+      <div class="bar-lbl">${dayName}</div>
+    `;
+    histogram.appendChild(barWrap);
+  });
 }
 
 function updateUI(data) {
   const summary = data.summary || {};
-  const goals = summary.goals || { calories: 2200, protein_g: 160, fat_g: 70, carbs_g: 230 };
+  const goals = summary.goals || { calories: 2200, protein_g: 160, fat_g: 70, carbs_g: 230, weight_current: 80, weight_goal: 75 };
   const meals = data.meals || [];
-  const products = data.products || [];
+  
+  renderCalendarAndHistogram(data.history || {}, goals);
 
   const cal = Math.round(summary.total_calories || 0);
   const p = Math.round(summary.total_protein || 0);
   const f = Math.round(summary.total_fat || 0);
   const c = Math.round(summary.total_carbs || 0);
+  const activeCal = Math.round(summary.active_calories || 0);
+
+  document.getElementById('day-date').innerText = currentDate;
 
   // Update Dial
   document.getElementById('dial-kcal').innerText = cal;
@@ -383,7 +412,9 @@ function updateUI(data) {
   document.getElementById('dial-circle').style.strokeDashoffset = circleOffset;
 
   // Update KV
+  document.getElementById('kv-weight').innerText = `${goals.weight_current}кг (Цель: ${goals.weight_goal}кг)`;
   document.getElementById('kv-left').innerText = `${Math.max(0, goals.calories - cal)} ккал`;
+  document.getElementById('kv-active').innerText = `${activeCal} ккал`;
   document.getElementById('kv-p').innerText = `${p}g / ${goals.protein_g}g`;
   document.getElementById('kv-f').innerText = `${f}g / ${goals.fat_g}g`;
   document.getElementById('kv-c').innerText = `${c}g / ${goals.carbs_g}g`;
@@ -398,74 +429,47 @@ function updateUI(data) {
   document.getElementById('macro-c-val').innerText = `${c}g`;
   document.getElementById('ring-c').style.strokeDashoffset = 301 - (301 * Math.min(1.0, c / goals.carbs_g));
 
-  // Update Meals List
-  const container = document.getElementById('meals-container');
-  if (meals.length === 0) {
-    container.innerHTML = `<div class="mealcard"><div class="mc-head"><span class="mc-name">Нет записей</span></div><div class="mc-sum"><span class="mc-k">0<small>ккал</small></span></div></div>`;
-  } else {
-    container.innerHTML = meals.map((m, idx) => {
-      const mType = m.meal_type || 'Прием пищи';
-      const mIcon = mType === 'Завтрак' ? '🍳' : (mType === 'Обед' ? '🍲' : (mType === 'Ужин' ? '🌙' : '🍎'));
-      return `
-        <div class="mealcard">
-          <div class="mc-head">
-            <span class="mc-name">${mIcon} ${escapeHtml(mType.toUpperCase())} #${m.id || idx+1}</span>
-            <span class="mc-time">${m.timestamp || 'Сегодня'}</span>
-          </div>
-          <div class="mc-sum">
-            <span class="mc-k">${Math.round(m.total_calories || 0)}<small>ккал</small></span>
-            <span class="mc-macro">Б: ${Math.round(m.total_protein || 0)}g | Ж: ${Math.round(m.total_fat || 0)}g | У: ${Math.round(m.total_carbs || 0)}g</span>
-          </div>
-          <ul>
-            ${(m.items || []).map(i => `
-              <li>
-                <span class="nm">${escapeHtml(i.product_name)}</span>
-                <span class="g">${Math.round(i.quantity_g)}г</span>
-                <span class="k">${Math.round(i.calories)} ккал</span>
-              </li>
-            `).join('')}
-          </ul>
-        </div>
-      `;
-    }).join('');
-  }
+  // Update Meals (4 Blocks)
+  const blocks = { 'Завтрак': [], 'Обед': [], 'Ужин': [], 'Перекус': [] };
+  
+  meals.forEach(m => {
+    let t = m.meal_type || 'Перекус';
+    if(t.toLowerCase().includes('завтрак')) blocks['Завтрак'].push(m);
+    else if(t.toLowerCase().includes('обед')) blocks['Обед'].push(m);
+    else if(t.toLowerCase().includes('ужин')) blocks['Ужин'].push(m);
+    else blocks['Перекус'].push(m);
+  });
 
-  // Update Products Catalog Table
-  const prodTable = document.getElementById('products-table-body');
-  if (products.length === 0) {
-    prodTable.innerHTML = `<tr><td colspan="7" style="padding:16px 14px; color:var(--ink-3)">База продуктов пуста. Начните добавлять еду в боте!</td></tr>`;
-  } else {
-    prodTable.innerHTML = products.map(p => `
-      <tr style="border-top:1px solid var(--hair)">
-        <td style="padding:10px 14px; font-weight:600">${escapeHtml(p.product_name)}</td>
-        <td style="padding:10px 14px; font-family:'JetBrains Mono',monospace">${Math.round(p.calories_per_100g || 0)} ккал</td>
-        <td style="padding:10px 14px; font-family:'JetBrains Mono',monospace; color:var(--p)">${Math.round(p.protein_per_100g || 0)}g</td>
-        <td style="padding:10px 14px; font-family:'JetBrains Mono',monospace; color:var(--f)">${Math.round(p.fat_per_100g || 0)}g</td>
-        <td style="padding:10px 14px; font-family:'JetBrains Mono',monospace; color:var(--c)">${Math.round(p.carbs_per_100g || 0)}g</td>
-        <td style="padding:10px 14px; font-family:'JetBrains Mono',monospace">${p.price_rub ? p.price_rub + ' ₽' : '—'}</td>
-        <td style="padding:10px 14px">
-          <span class="pill ${p.badge_class || 'good'}">
-            ${p.efficiency_score || '8.0'} / 10 (${p.efficiency_label || 'Высокий'})
-          </span>
-        </td>
-      </tr>
-    `).join('');
-  }
+  const updateBlock = (id, arr) => {
+    const el = document.getElementById(id);
+    let totCal = 0, totP = 0, totF = 0, totC = 0;
+    let listHtml = '';
+    
+    arr.forEach(m => {
+      if(m.notes === 'Активность') return; // Skip activities in food blocks
+      totCal += m.total_calories || 0;
+      totP += m.total_protein || 0;
+      totF += m.total_fat || 0;
+      totC += m.total_carbs || 0;
+      (m.items || []).forEach(i => {
+        listHtml += `<li><span class="nm">${escapeHtml(i.product_name)}</span><span class="g">${Math.round(i.quantity_g)}г</span><span class="k">${Math.round(i.calories)} ккал</span></li>`;
+      });
+    });
+    
+    el.querySelector('.mc-sum').innerHTML = `<span class="mc-k">${Math.round(totCal)}<small>ккал</small></span><span class="mc-macro">Б: ${Math.round(totP)}g | Ж: ${Math.round(totF)}g | У: ${Math.round(totC)}g</span>`;
+    el.querySelector('ul').innerHTML = listHtml || '<li><span class="nm" style="color:var(--ink-3)">Нет записей</span></li>';
+  };
+
+  updateBlock('meal-breakfast', blocks['Завтрак']);
+  updateBlock('meal-lunch', blocks['Обед']);
+  updateBlock('meal-dinner', blocks['Ужин']);
+  updateBlock('meal-snack', blocks['Перекус']);
 }
 
 function escapeHtml(str) { return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
-function getFallbackData() {
-  return {
-    summary: { total_calories: 0, total_protein: 0, total_fat: 0, total_carbs: 0, goals: { calories: 2200, protein_g: 160, fat_g: 70, carbs_g: 230 } },
-    meals: [],
-    products: []
-  };
-}
-
 loadLiveDashboard();
-setInterval(loadLiveDashboard, 10000);
+setInterval(() => loadLiveDashboard(currentDate), 10000);
 </script>
 </body>
 </html>
-

@@ -1,13 +1,18 @@
 from http.server import BaseHTTPRequestHandler
 import json
-from database.db import get_today_summary, get_recent_meals, get_product_prices
+from database.db import get_today_summary, get_recent_meals, get_product_prices, get_meals_for_days
 from agents.coach_agent import coach_agent
+import urllib.parse
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == '/api/summary' or self.path == '/api/summary/':
-            summary = get_today_summary()
-            meals = get_recent_meals(limit=10)
+        parsed_path = urllib.parse.urlparse(self.path)
+        if parsed_path.path == '/api/summary' or parsed_path.path == '/api/summary/':
+            query_params = urllib.parse.parse_qs(parsed_path.query)
+            target_date = query_params.get('date', [None])[0]
+
+            summary = get_today_summary(target_date)
+            meals = get_recent_meals(limit=10, target_date=target_date)
             coach = coach_agent.analyze()
             products = get_product_prices()
             
@@ -60,12 +65,21 @@ class handler(BaseHTTPRequestHandler):
                     "message": f"Запись #{m.get('id')} ({m_type}) синхронизирована с Supabase Cloud и Веб-дашбордом."
                 })
 
+            # Also get history for the last 7 days for the chart
+            history_meals = get_meals_for_days(7)
+            history_summary = {}
+            for m in history_meals:
+                d = (m.get("timestamp") or "")[:10]
+                if d:
+                    history_summary[d] = history_summary.get(d, 0) + m.get("total_calories", 0)
+
             payload = {
                 "status": "success",
                 "summary": summary,
                 "meals": meals,
                 "coach": coach,
                 "products": products,
+                "history": history_summary,
                 "agent_telemetry": telemetry
             }
 

@@ -69,7 +69,7 @@ class TeamLeadAgent:
             prompt = f"""Classify this Russian message into exactly one category. Reply with ONLY the category word.
 
 Categories:
-- food: user is describing food they ate (e.g. яйца, макароны, съел, поел, на завтрак/обед/ужин)
+- food: user is describing food they ate (e.g. яйца, макароны) OR logged activities/burned calories (e.g. тренировка, активность, потратил, сожжен)
 - task: user asks a technical question, reports a bug, requests a feature, or asks "why/how" about the app
 - summary: user wants to see today's calorie/nutrition summary
 - coach: user wants diet advice or recommendations
@@ -298,9 +298,16 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
                 {"agent": "AuditorAgent", "task": f"Проверка логики для: {user_prompt}"}
             ]
 
+        from datetime import datetime
+        try:
+            with open("IDEAS.md", "a", encoding="utf-8") as f:
+                f.write(f"\n- **{datetime.now().strftime('%Y-%m-%d %H:%M')}**: {user_prompt}")
+        except Exception as e:
+            print(f"Failed to write to IDEAS.md: {e}")
+
         save_coach_recommendation(
             topic="Запрос фичи от пользователя",
-            recommendation=f"Тимлид сформировал {len(tasks_created)} подзадач для агентов системы.",
+            recommendation=f"Идея записана в блокнот (IDEAS.md): {user_prompt}",
             severity="info"
         )
 

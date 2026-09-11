@@ -48,5 +48,17 @@ CREATE TABLE IF NOT EXISTS user_goals (
     calories REAL DEFAULT 2200,
     protein_g REAL DEFAULT 160,
     fat_g REAL DEFAULT 70,
-    carbs_g REAL DEFAULT 230
+    carbs_g REAL DEFAULT 230,
+    weight_current REAL DEFAULT 80.0,
+    weight_goal REAL DEFAULT 75.0
+);
+
+CREATE TABLE IF NOT EXISTS custom_products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_name TEXT NOT NULL UNIQUE,
+    calories_100g REAL NOT NULL,
+    protein_100g REAL NOT NULL,
+    fat_100g REAL NOT NULL,
+    carbs_100g REAL NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

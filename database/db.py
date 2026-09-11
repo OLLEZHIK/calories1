@@ -44,6 +44,14 @@ def init_db():
     with get_connection() as conn:
         conn.executescript(sql_script)
         conn.commit()
+        
+        # Safely add new columns if they don't exist
+        try:
+            conn.execute("ALTER TABLE user_goals ADD COLUMN weight_current REAL DEFAULT 80.0")
+            conn.execute("ALTER TABLE user_goals ADD COLUMN weight_goal REAL DEFAULT 75.0")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass # Column already exists
 
 def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal_type: str = "Прием пищи") -> int:
     """
@@ -159,7 +167,21 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
             "protein_g": goals_row["protein_g"] if goals_row else 160,
             "fat_g": goals_row["fat_g"] if goals_row else 70,
             "carbs_g": goals_row["carbs_g"] if goals_row else 230,
+            "weight_current": goals_row["weight_current"] if (goals_row and "weight_current" in goals_row.keys()) else 80.0,
+            "weight_goal": goals_row["weight_goal"] if (goals_row and "weight_goal" in goals_row.keys()) else 75.0,
         }
+
+        # Calculate active calories (where notes = 'Активность' or similar)
+        active_row = cursor.execute("""
+            SELECT COALESCE(SUM(ABS(mi.calories)), 0) as active_cal
+            FROM meals m
+            JOIN meal_items mi ON m.id = mi.meal_id
+            WHERE DATE(m.timestamp) = DATE(?) AND m.notes = 'Активность'
+        """, (target_date,)).fetchone()
+        active_calories = round(active_row["active_cal"]) if active_row else 0
+
+        # Adjust total_calories if it includes negative active calories (we already added them as negative to the DB to subtract from daily balance)
+        # But we still want to expose active_calories as a separate metric.
 
         return {
             "date": target_date,
@@ -167,13 +189,17 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
             "total_protein": round(row["total_protein"], 1),
             "total_fat": round(row["total_fat"], 1),
             "total_carbs": round(row["total_carbs"], 1),
+            "active_calories": active_calories,
             "goals": goals
         }
 
-def get_recent_meals(limit: int = 10) -> List[Dict[str, Any]]:
+def get_recent_meals(limit: int = 10, target_date: str = None) -> List[Dict[str, Any]]:
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            sp_meals = supabase_request(f"meals?select=*,meal_items(*)&order=timestamp.desc&limit={limit}")
+            url = f"meals?select=*,meal_items(*)&order=timestamp.desc&limit={limit}"
+            if target_date:
+                url += f"&timestamp=gte.{target_date}T00:00:00&timestamp=lte.{target_date}T23:59:59"
+            sp_meals = supabase_request(url)
             if sp_meals and isinstance(sp_meals, list) and len(sp_meals) > 0:
                 result = []
                 for m in sp_meals:
@@ -196,8 +222,65 @@ def get_recent_meals(limit: int = 10) -> List[Dict[str, Any]]:
 
     with get_connection() as conn:
         cursor = conn.cursor()
+        if target_date:
+            meals_rows = cursor.execute(
+                "SELECT * FROM meals WHERE DATE(timestamp) = DATE(?) ORDER BY timestamp DESC LIMIT ?", (target_date, limit)
+            ).fetchall()
+        else:
+            meals_rows = cursor.execute(
+                "SELECT * FROM meals ORDER BY timestamp DESC LIMIT ?", (limit,)
+            ).fetchall()
+
+        result = []
+        for m in meals_rows:
+            items_rows = cursor.execute(
+                "SELECT * FROM meal_items WHERE meal_id = ?", (m["id"],)
+            ).fetchall()
+            items = [dict(item) for item in items_rows]
+
+            result.append({
+                "id": m["id"],
+                "timestamp": m["timestamp"],
+                "raw_input": m["raw_input"],
+                "input_type": m["input_type"],
+                "meal_type": m["notes"] if m["notes"] else "Прием пищи",
+                "items": items,
+                "total_calories": int(round(sum(i["calories"] for i in items))),
+                "total_protein": int(round(sum(i["protein_g"] for i in items))),
+                "total_fat": int(round(sum(i["fat_g"] for i in items))),
+                "total_carbs": int(round(sum(i["carbs_g"] for i in items))),
+            })
+        return result
+
+def get_meals_for_days(days: int = 3) -> List[Dict[str, Any]]:
+    target_date = (date.today() - timedelta(days=days)).isoformat()
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            sp_meals = supabase_request(f"meals?select=*,meal_items(*)&timestamp=gte.{target_date}&order=timestamp.desc")
+            if sp_meals and isinstance(sp_meals, list) and len(sp_meals) > 0:
+                result = []
+                for m in sp_meals:
+                    items = m.get("meal_items", [])
+                    result.append({
+                        "id": m.get("id"),
+                        "timestamp": (m.get("timestamp") or "")[:16].replace("T", " "),
+                        "raw_input": m.get("raw_input"),
+                        "input_type": m.get("input_type"),
+                        "meal_type": m.get("notes") or "Прием пищи",
+                        "items": items,
+                        "total_calories": int(round(sum(float(i.get("calories", 0)) for i in items))),
+                        "total_protein": int(round(sum(float(i.get("protein_g", 0)) for i in items))),
+                        "total_fat": int(round(sum(float(i.get("fat_g", 0)) for i in items))),
+                        "total_carbs": int(round(sum(float(i.get("carbs_g", 0)) for i in items))),
+                    })
+                return result
+        except Exception as e:
+            print(f"Supabase historical meals warning: {e}")
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
         meals_rows = cursor.execute(
-            "SELECT * FROM meals ORDER BY timestamp DESC LIMIT ?", (limit,)
+            "SELECT * FROM meals WHERE timestamp >= ? ORDER BY timestamp DESC", (target_date,)
         ).fetchall()
 
         result = []
@@ -220,6 +303,51 @@ def get_recent_meals(limit: int = 10) -> List[Dict[str, Any]]:
                 "total_carbs": int(round(sum(i["carbs_g"] for i in items))),
             })
         return result
+
+def save_custom_product(product_name: str, cal: float, p: float, f: float, c: float):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO custom_products (product_name, calories_100g, protein_100g, fat_100g, carbs_100g)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(product_name) DO UPDATE SET
+                calories_100g = excluded.calories_100g,
+                protein_100g = excluded.protein_100g,
+                fat_100g = excluded.fat_100g,
+                carbs_100g = excluded.carbs_100g,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (product_name, cal, p, f, c)
+        )
+        conn.commit()
+
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            # Use upsert to avoid duplicate errors if possible
+            supabase_request("custom_products", method="POST", data={
+                "product_name": product_name,
+                "calories_100g": cal,
+                "protein_100g": p,
+                "fat_100g": f,
+                "carbs_100g": c
+            })
+        except Exception as e:
+            print(f"Supabase custom products sync warning: {e}")
+
+def get_custom_product(product_name: str) -> Optional[Dict[str, float]]:
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        row = cursor.execute("SELECT * FROM custom_products WHERE product_name = ?", (product_name,)).fetchone()
+        if row:
+            return {
+                "calories": float(row["calories_100g"]),
+                "protein": float(row["protein_100g"]),
+                "fat": float(row["fat_100g"]),
+                "carbs": float(row["carbs_100g"]),
+                "category": "custom"
+            }
+    return None
 
 def save_product_price(product_name: str, price_rub: float, weight_g: float, category: str = "general",
                        protein_100g: float = 0, fat_100g: float = 0, carbs_100g: float = 0, calories_100g: float = 0):

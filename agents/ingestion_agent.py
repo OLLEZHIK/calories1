@@ -98,10 +98,16 @@ RULES:
 3. For each food item, extract:
    - "product_name": normalized Russian name (e.g. "куриное яйцо", "макароны", "бекон", "майонез", "сосиски", "моцарелла light", "помидор", "масло оливковое")
    - "quantity_g": total net weight in grams (number, e.g. 3 eggs = 165g, 1 mozzarella = 125g, tomato = 50g)
-   - "explicit_kcal": total calories for item if specified, or null
+    - "explicit_kcal": total calories for item if specified, or null
    - "explicit_protein": total protein in grams if specified, or null
    - "explicit_fat": total fat in grams if specified, or null
    - "explicit_carbs": total carbs in grams if specified, or null
+4. If the user mentions burned active calories, workouts, or activities (e.g., "потратил 500 ккал на пробежке", "Тренировка 300 ккал", "Активность 400"), create an item with:
+   - "product_name": "Активность"
+   - "quantity_g": 0
+   - "explicit_kcal": -500 (make sure it's negative)
+   - "explicit_protein": 0, "explicit_fat": 0, "explicit_carbs": 0
+   And set the "meal_type" of this block to "Активность".
 
 Return ONLY valid JSON, no markdown, no explanation:
 {"meals": [{"meal_type": "Завтрак", "items": [{"product_name": "куриное яйцо", "quantity_g": 165, "explicit_kcal": null, "explicit_protein": null, "explicit_fat": null, "explicit_carbs": null}]}]}"""
