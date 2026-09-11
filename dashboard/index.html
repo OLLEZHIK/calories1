@@ -357,11 +357,8 @@ function escapeHtml(str) { return (str || '').replace(/&/g, "&amp;").replace(/</
 
 function getFallbackData() {
   return {
-    summary: { total_calories: 1717, total_protein: 141.4, total_fat: 57.2, total_carbs: 167.9, goals: { calories: 2200, protein_g: 160, fat_g: 70, carbs_g: 230 } },
-    meals: [
-      { id: 1, timestamp: "Сегодня 13:45", total_calories: 684, total_protein: 59.6, total_fat: 24.8, total_carbs: 59.1, items: [{ product_name: "Яйца 5 шт", quantity_g: 275, calories: 412 }, { product_name: "Масло сливочное", quantity_g: 20, calories: 30 }, { product_name: "Творог 5%", quantity_g: 200, calories: 242 }] },
-      { id: 2, timestamp: "Сегодня 18:20", total_calories: 1033, total_protein: 81.8, total_fat: 32.4, total_carbs: 108.8, items: [{ product_name: "Куриная грудка", quantity_g: 200, calories: 330 }, { product_name: "Гречка", quantity_g: 150, calories: 514 }, { product_name: "Майонез", quantity_g: 30, calories: 188 }] }
-    ]
+    summary: { total_calories: 0, total_protein: 0, total_fat: 0, total_carbs: 0, goals: { calories: 2200, protein_g: 160, fat_g: 70, carbs_g: 230 } },
+    meals: []
   };
 }
 
