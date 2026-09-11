@@ -4,7 +4,7 @@ import urllib.request
 import urllib.error
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date
-from config import DB_PATH, SUPABASE_URL, SUPABASE_KEY, USE_SUPABASE
+from config import DB_PATH, SUPABASE_URL, SUPABASE_KEY, USE_SUPABASE, DEFAULT_GOALS
 from pathlib import Path
 
 def supabase_request(endpoint: str, method: str = "GET", data: Optional[Dict[str, Any]] = None) -> Any:
@@ -110,21 +110,22 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
     # Query Supabase Cloud DB if configured
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            sp_meals = supabase_request("meals?select=*,meal_items(*)")
-            if sp_meals and isinstance(sp_meals, list) and len(sp_meals) > 0:
+            # Filter by date directly in the Supabase query to avoid fetching all records
+            sp_meals = supabase_request(
+                f"meals?select=*,meal_items(*)&timestamp=gte.{target_date}T00:00:00&timestamp=lt.{target_date}T23:59:59"
+            )
+            if sp_meals is not None and isinstance(sp_meals, list):
                 tot_cal = 0.0
                 tot_p = 0.0
                 tot_f = 0.0
                 tot_c = 0.0
 
                 for m in sp_meals:
-                    ts = (m.get("timestamp") or "")[:10]
-                    if not target_date or ts == target_date:
-                        for mi in m.get("meal_items", []):
-                            tot_cal += float(mi.get("calories", 0))
-                            tot_p += float(mi.get("protein_g", 0))
-                            tot_f += float(mi.get("fat_g", 0))
-                            tot_c += float(mi.get("carbs_g", 0))
+                    for mi in m.get("meal_items", []):
+                        tot_cal += float(mi.get("calories", 0))
+                        tot_p += float(mi.get("protein_g", 0))
+                        tot_f += float(mi.get("fat_g", 0))
+                        tot_c += float(mi.get("carbs_g", 0))
 
                 return {
                     "date": target_date,
