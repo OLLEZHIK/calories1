@@ -2,12 +2,15 @@
   "version": 2,
   "builds": [
     { "src": "dashboard/index.html", "use": "@vercel/static" },
+    { "src": "dashboard/agents.html", "use": "@vercel/static" },
     { "src": "api/index.py", "use": "@vercel/python" },
     { "src": "api/telegram_webhook.py", "use": "@vercel/python" }
   ],
   "routes": [
     { "src": "/api/telegram_webhook", "dest": "api/telegram_webhook.py" },
     { "src": "/api/(.*)", "dest": "api/index.py" },
+    { "src": "/agents", "dest": "dashboard/agents.html" },
+    { "src": "/agents.html", "dest": "dashboard/agents.html" },
     { "src": "/(.*)", "dest": "dashboard/index.html" }
   ]
 }

@@ -15,3 +15,5 @@ calories.db
 .vscode/
 .idea/
 .DS_Store
+
+.vercel

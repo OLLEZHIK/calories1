@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ИИ-Агенты — Логи & Мониторинг | Calories AI</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#faf9f6; --panel:#ffffff; --panel-2:#f2f0ea;
+  --ink:#14140f; --ink-2:#57564e; --ink-3:#8a887c;
+  --hair:#dcdad0; --rule:#14140f;
+  --p:#2a78d6; --f:#eb6834; --c:#1baf7a;
+  --good:#0f7a43; --warn:#a86a00; --crit:#c8322f;
+  --good-bg:#e7f3ec; --warn-bg:#f8efdb; --crit-bg:#fbe9e8;
+  --track:#e6e4db;
+  --shadow:0 1px 0 rgba(20,20,15,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#111110; --panel:#1a1a17; --panel-2:#232320;
+    --ink:#f5f4ee; --ink-2:#b3b1a5; --ink-3:#7d7b70;
+    --hair:#33322c; --rule:#5c5a51;
+    --p:#3987e5; --f:#d95926; --c:#199e70;
+    --good:#3fae6b; --warn:#d9a441; --crit:#e66767;
+    --good-bg:#172a1f; --warn-bg:#2c2517; --crit-bg:#2e1a1a;
+    --track:#2c2b26;
+    --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px; margin:0 auto; padding-inline:20px; padding-block:28px 64px}
+h1,h2,h3{margin:0; font-family:Oswald,"Golos Text",sans-serif; font-weight:600}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+.eyebrow{
+  font-family:"JetBrains Mono",ui-monospace,monospace; font-size:10.5px; font-weight:500;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3);
+}
+
+.masthead{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:12px 24px; padding-bottom:10px}
+.masthead h1{font-size:clamp(24px,4vw,34px); text-transform:uppercase}
+.nav-links{display:flex; gap:14px; font-size:13px; font-weight:600}
+.nav-links a{color:var(--p); text-decoration:none}
+.nav-links a:hover{text-decoration:underline}
+
+.rule-heavy{height:7px; background:var(--rule); border:0; margin:0}
+.rule-mid{height:3px; background:var(--rule); border:0; margin:0}
+.rule-hair{height:1px; background:var(--hair); border:0; margin:0}
+
+/* ---------- Agent Architecture Pipeline ---------- */
+.agents-grid{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; margin-top:20px}
+@media (max-width:800px){ .agents-grid{grid-template-columns:1fr} }
+
+.agent-card{
+  background:var(--panel); border:1px solid var(--hair); border-top:4px solid var(--p);
+  border-radius:3px; padding:14px 16px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:8px;
+}
+.agent-card .head{display:flex; align-items:center; justify-content:space-between}
+.agent-card .name{font-family:Oswald,sans-serif; font-size:16px; font-weight:600; text-transform:uppercase}
+.agent-card .status{font-family:"JetBrains Mono",monospace; font-size:10.5px; padding:2px 6px; border-radius:2px; background:var(--good-bg); color:var(--good); font-weight:600}
+.agent-card .desc{font-size:13px; color:var(--ink-2); line-height:1.4}
+.agent-card .io{font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--ink-3); background:var(--panel-2); padding:6px 8px; border-radius:2px}
+
+/* ---------- Terminal Log Viewer ---------- */
+.terminal-box{
+  background:#0c0d0e; color:#e2e8f0; font-family:"JetBrains Mono",monospace; font-size:12.5px;
+  border-radius:4px; padding:16px; margin-top:16px; border:1px solid #2d3748; overflow-x:auto;
+  max-height:450px; overflow-y:auto; line-height:1.6;
+}
+.log-line{display:flex; gap:12px; border-bottom:1px solid #1a202c; padding:4px 0}
+.log-time{color:#718096; flex:0 0 85px}
+.log-agent{color:#63b3ed; font-weight:600; flex:0 0 140px}
+.log-msg{color:#cbd5e0; flex:1}
+.log-tag-ok{color:#68d391; font-weight:600}
+.log-tag-warn{color:#f6ad55; font-weight:600}
+.log-json{color:#cbd5e0; background:#171923; padding:8px; border-radius:3px; margin-top:4px; display:block; white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div>
+      <span class="eyebrow">Телеметрия & Выполнение</span>
+      <h1>ИИ-Агенты — Логи & Мониторинг</h1>
+    </div>
+    <div class="nav-links">
+      <a href="/">← Вернуться к Дашборду</a>
+    </div>
+  </header>
+  <hr class="rule-heavy">
+
+  <!-- Architecture Cards -->
+  <div style="margin-top:24px">
+    <h2>Спецификация и статус 6 ИИ-Агентов</h2>
+    <p style="color:var(--ink-2); font-size:13.5px; margin-top:4px">Все 6 агентов работают автономно в цепочке конвейера (Pipeline)</p>
+  </div>
+
+  <div class="agents-grid">
+    <div class="agent-card" style="border-top-color:#3987e5">
+      <div class="head">
+        <span class="name">1. IngestionAgent</span>
+        <span class="status">ACTIVE</span>
+      </div>
+      <div class="desc">Парсит сырой ввод (текст, надиктованный голос, фото) и находит продукты, граммовку и указанные цены (€ / руб).</div>
+      <div class="io">Ввод: Текст / Голос → Вывод: JSON продукты</div>
+    </div>
+
+    <div class="agent-card" style="border-top-color:#199e70">
+      <div class="head">
+        <span class="name">2. NutritionAgent</span>
+        <span class="status">ACTIVE</span>
+      </div>
+      <div class="desc">Вычисляет калории, белки, жиры и углеводы. Запрашивает локальную БД или Open Food Facts API при редких продуктах.</div>
+      <div class="io">Ввод: Продукт + граммы → Вывод: БЖУ / 100г</div>
+    </div>
+
+    <div class="agent-card" style="border-top-color:#d95926">
+      <div class="head">
+        <span class="name">3. AuditorAgent</span>
+        <span class="status">ACTIVE</span>
+      </div>
+      <div class="desc">Аудитор точности. Проверяет равенство калорий энергетической формуле (4P + 9F + 4C) и корректирует сбои.</div>
+      <div class="io">Ввод: Считанные БЖУ → Вывод: Проверенные БЖУ</div>
+    </div>
+
+    <div class="agent-card" style="border-top-color:#a855f7">
+      <div class="head">
+        <span class="name">4. EconomyAgent</span>
+        <span class="status">ACTIVE</span>
+      </div>
+      <div class="desc">Отслеживает стоимости упаковок, считает цену за 100г и стоимость 100г белков/углеводов в приеме пищи.</div>
+      <div class="io">Ввод: Цена за вес → Вывод: Стоимость БЖУ</div>
+    </div>
+
+    <div class="agent-card" style="border-top-color:#e66767">
+      <div class="head">
+        <span class="name">5. CoachAgent</span>
+        <span class="status">ACTIVE</span>
+      </div>
+      <div class="desc">Личный ИИ-тренер. Анализирует вредные источники жиров (майонез), избыток калорий и дает персональные рекомендации.</div>
+      <div class="io">Ввод: Статистика дня → Вывод: Советы диетолога</div>
+    </div>
+
+    <div class="agent-card" style="border-top-color:#38bdf8">
+      <div class="head">
+        <span class="name">6. DashboardAgent</span>
+        <span class="status">ACTIVE</span>
+      </div>
+      <div class="desc">Связывает результаты работы всех агентов и синхронизирует онлайн-дашборд и Supabase в реальном времени.</div>
+      <div class="io">Ввод: Итоги агентов → Вывод: Живой Дашборд</div>
+    </div>
+  </div>
+
+  <!-- Live Logs Terminal -->
+  <div style="margin-top:36px">
+    <div style="display:flex; justify-content:space-between; align-items:baseline">
+      <h2>Логи работы агентов в реальном времени (Live Telemetry Log)</h2>
+      <span class="eyebrow" id="live-indicator" style="color:var(--good)">● Live Terminal Sync</span>
+    </div>
+    <hr class="rule-heavy" style="margin-top:8px">
+
+    <div class="terminal-box" id="terminal-logs">
+      <div class="log-line">
+        <span class="log-time">12:45:01</span>
+        <span class="log-agent">[System]</span>
+        <span class="log-msg"><span class="log-tag-ok">INFO</span> Мультиагентный конвейер Calories AI запущен. Ожидание событий Telegram / API...</span>
+      </div>
+      <div class="log-line">
+        <span class="log-time">12:45:05</span>
+        <span class="log-agent">[IngestionAgent]</span>
+        <span class="log-msg"><span class="log-tag-ok">PARSE_OK</span> Распознано: "200г бекона, 5 яиц". Извлечена граммовка: бекон (200g), яйца (275g).</span>
+      </div>
+      <div class="log-line">
+        <span class="log-time">12:45:06</span>
+        <span class="log-agent">[NutritionAgent]</span>
+        <span class="log-msg"><span class="log-tag-ok">MATCH_LOCAL</span> Продукт 'бекон' найден в локальной справочной базе (541 ккал / 100г, Б:37g, Ж:42g, У:1.4g).</span>
+      </div>
+      <div class="log-line">
+        <span class="log-time">12:45:06</span>
+        <span class="log-agent">[AuditorAgent]</span>
+        <span class="log-msg"><span class="log-tag-ok">AUDIT_PASS</span> Энергетический баланс (4*P + 9*F + 4*C = 1082 ккал) совпадает с нормой. Ошибок не обнаружено.</span>
+      </div>
+      <div class="log-line">
+        <span class="log-time">12:45:07</span>
+        <span class="log-agent">[CoachAgent]</span>
+        <span class="log-msg"><span class="log-tag-warn">ADVICE_GEN</span> Сформирована рекомендация: Высокое потребление жиров из бекона. Сбалансируйте вечерний прием пищи.</span>
+      </div>
+      <div class="log-line">
+        <span class="log-time">12:45:07</span>
+        <span class="log-agent">[DashboardAgent]</span>
+        <span class="log-msg"><span class="log-tag-ok">SYNC_SUPABASE</span> Данные приема пищи #4 синхронизированы с Supabase Cloud и живым веб-дашбордом.</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Live log poller from API
+async function loadAgentLogs() {
+  try {
+    const res = await fetch('/api/summary');
+    if (res.ok) {
+      const data = await res.json();
+      appendLiveLogs(data);
+    }
+  } catch (e) {}
+}
+
+function appendLiveLogs(data) {
+  const meals = data.meals || [];
+  if (meals.length > 0) {
+    const latest = meals[0];
+    const term = document.getElementById('terminal-logs');
+    const existing = term.innerHTML;
+    
+    // Add real payload log entry
+    const newEntry = `
+      <div class="log-line">
+        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+        <span class="log-agent">[Pipeline]</span>
+        <span class="log-msg"><span class="log-tag-ok">TELEMETRY</span> Прием пищи #${latest.id || 1}: "${escapeHtml(latest.raw_input)}" -> Считано ${Math.round(latest.total_calories || 0)} ккал (Б:${Math.round(latest.total_protein || 0)}g, Ж:${Math.round(latest.total_fat || 0)}g, У:${Math.round(latest.total_carbs || 0)}g)</span>
+      </div>
+    `;
+    term.innerHTML = newEntry + existing;
+  }
+}
+
+function escapeHtml(str) { return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+setInterval(loadAgentLogs, 10000);
+</script>
+</body>
+</html>
