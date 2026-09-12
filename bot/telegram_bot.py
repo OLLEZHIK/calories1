@@ -208,14 +208,22 @@ def start_bot():
                 
                 if mode == MODE_ADD_PRODUCT:
                     # Send to Gemini to extract product data
-                    from google import genai
                     from google.genai import types
                     import json
                     from database.db import save_custom_product
-                    
-                    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+                    from gemini_client import get_genai_client
+
+                    client = get_genai_client()
+                    if not client:
+                        set_mode(context, None)
+                        await update.message.reply_markdown(
+                            "⚠️ **Gemini недоступен** — не настроен рабочий ключ/service account.\n"
+                            "Добавление продукта по фото сейчас не работает, попробуйте позже.",
+                            reply_markup=main_keyboard
+                        )
+                        return
                     sys_prompt = "Извлеки название продукта и КБЖУ на 100 грамм из изображения. Верни ТОЛЬКО JSON формата: {\"product_name\": \"string\", \"calories_100g\": float, \"protein_100g\": float, \"fat_100g\": float, \"carbs_100g\": float}."
-                    
+
                     resp = client.models.generate_content(
                         model=os.getenv("GEMINI_MODEL", "gemini-3.6-flash"),
                         contents=[

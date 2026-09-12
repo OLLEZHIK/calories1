@@ -17,13 +17,12 @@ class CoachAgent:
         meals = get_recent_meals(limit=10)
         
         recommendations = []
-        gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+        from gemini_client import get_genai_client
+        client = get_genai_client()
 
-        if gemini_key:
+        if client:
             try:
-                from google import genai
                 from google.genai import types
-                client = genai.Client(api_key=gemini_key)
                 model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
                 
                 prompt = f"""You are a professional nutrition coach. Analyze the user's daily food intake and recent meals in Russian.

@@ -25,14 +25,13 @@ class AudioTranscriptionAgent:
 
         errors = []
 
-        # ── 1. Gemini 1.5 Flash Audio (primary when GEMINI_API_KEY is set) ──
-        gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
-        if gemini_key:
+        # ── 1. Gemini Audio (primary when a Gemini client is configured) ──
+        from gemini_client import get_genai_client
+        client = get_genai_client()
+        if client:
             try:
-                from google import genai
                 from google.genai import types
                 model = os.getenv("GEMINI_AUDIO_MODEL", "gemini-3.6-flash")
-                client = genai.Client(api_key=gemini_key)
                 b64_audio = base64.b64encode(voice_bytes).decode("utf-8")
                 resp = client.models.generate_content(
                     model=model,

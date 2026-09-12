@@ -7,13 +7,12 @@ from typing import List, Dict, Any
 # ── Shared Gemini helper ───────────────────────────────────────────────────────
 def _call_gemini(prompt: str, system: str = "", model: str = "gemini-3.6-flash") -> str:
     """Call Gemini API via google-genai SDK. Returns response text or '' on error."""
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
+    from gemini_client import get_genai_client
+    client = get_genai_client()
+    if not client:
         return ""
     try:
-        from google import genai
         from google.genai import types
-        client = genai.Client(api_key=api_key)
         contents = []
         if system:
             contents.append(types.Content(role="user",    parts=[types.Part(text=system)]))
@@ -113,12 +112,11 @@ Return ONLY valid JSON, no markdown, no explanation:
 {"meals": [{"meal_type": "Завтрак", "items": [{"product_name": "куриное яйцо", "quantity_g": 165, "explicit_kcal": null, "explicit_protein": null, "explicit_fat": null, "explicit_carbs": null}]}]}"""
 
         # ── 1. Try Gemini (primary) ───────────────────────────────────────────
-        gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
-        if gemini_key:
+        from gemini_client import get_genai_client
+        client = get_genai_client()
+        if client:
             try:
-                from google import genai
                 from google.genai import types
-                client = genai.Client(api_key=gemini_key)
                 model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
                 user_parts = []
                 if image_bytes:

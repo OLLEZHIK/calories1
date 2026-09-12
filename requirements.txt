@@ -1,0 +1,17 @@
+# Core LLM SDK used by all agents (ingestion, nutrition-photo lookup, coach,
+# intent classification, audio transcription). Without this installed, every
+# Gemini call silently fails (caught) and the system falls back to Groq/regex
+# or, for the "add product by photo" feature, fails outright (no fallback).
+google-genai>=0.3.0
+
+# Needed by gemini_client.py to authenticate with a Vertex AI service
+# account (google.oauth2.service_account) instead of a plain API key --
+# required now that Google issues service-account-bound ("AQ.") keys
+# instead of classic AIzaSy... keys for this account.
+google-auth>=2.30.0
+
+# Telegram long-polling bot (bot/telegram_bot.py, run locally / on a server).
+# Not required by the Vercel webhook (api/telegram_webhook.py talks to the
+# Telegram HTTP API directly via urllib), but needed if you run the bot with
+# `python bot/telegram_bot.py` or `python mcp_server.py`.
+python-telegram-bot>=21.0

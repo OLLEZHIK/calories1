@@ -9,6 +9,9 @@ env/
 # Databases & Environment
 calories.db
 .env
+.env.*
+!.env.example
+vertex_env_snippet.txt
 *.log
 
 # IDE & System

@@ -2,14 +2,20 @@ import sqlite3
 import json
 import urllib.request
 import urllib.error
+import urllib.parse
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date, timedelta
 from config import DB_PATH, SUPABASE_URL, SUPABASE_KEY, USE_SUPABASE, DEFAULT_GOALS
 from pathlib import Path
 
-def supabase_request(endpoint: str, method: str = "GET", data: Optional[Dict[str, Any]] = None) -> Any:
+def supabase_request(
+    endpoint: str,
+    method: str = "GET",
+    data: Optional[Dict[str, Any]] = None,
+    prefer: str = "return=representation",
+) -> Any:
     """Executes HTTPS REST request to Supabase Database API."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    if not USE_SUPABASE or not SUPABASE_URL or not SUPABASE_KEY:
         return None
 
     url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{endpoint}"
@@ -17,7 +23,7 @@ def supabase_request(endpoint: str, method: str = "GET", data: Optional[Dict[str
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
         "Content-Type": "application/json",
-        "Prefer": "return=representation"
+        "Prefer": prefer,
     }
 
     body_bytes = json.dumps(data).encode("utf-8") if data else None
@@ -28,7 +34,8 @@ def supabase_request(endpoint: str, method: str = "GET", data: Optional[Dict[str
             resp_text = resp.read().decode("utf-8")
             return json.loads(resp_text) if resp_text else []
     except Exception as e:
-        print(f"Supabase API Request Error: {e}")
+        # Avoid leaking request details or failing on a non-UTF-8 Windows console.
+        print(f"Supabase API request failed: {type(e).__name__}")
         return None
 
 def get_connection():
@@ -72,13 +79,13 @@ def save_custom_product(product_name: str, cal_100: float, p_100: float, f_100: 
         
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            supabase_request("custom_products", method="POST", data={
+            supabase_request("custom_products?on_conflict=product_name", method="POST", data={
                 "product_name": product_name,
                 "calories_100g": cal_100,
                 "protein_100g": p_100,
                 "fat_100g": f_100,
                 "carbs_100g": c_100
-            })
+            }, prefer="resolution=merge-duplicates,return=representation")
         except Exception as e:
             print(f"Supabase custom_product error: {e}")
 
@@ -114,6 +121,53 @@ def get_custom_product(product_name: str) -> Optional[Dict[str, float]]:
             pass
             
     return None
+
+
+def set_bot_session_mode(chat_id: int, mode: Optional[str]) -> None:
+    """Persist the one-message Telegram interaction mode across Vercel cold starts."""
+    chat_id = str(chat_id)
+    with get_connection() as conn:
+        if mode:
+            conn.execute(
+                "INSERT INTO bot_sessions (chat_id, mode) VALUES (?, ?) "
+                "ON CONFLICT(chat_id) DO UPDATE SET mode = excluded.mode, updated_at = CURRENT_TIMESTAMP",
+                (chat_id, mode),
+            )
+        else:
+            conn.execute("DELETE FROM bot_sessions WHERE chat_id = ?", (chat_id,))
+        conn.commit()
+
+    if SUPABASE_URL and SUPABASE_KEY:
+        encoded_id = urllib.parse.quote(chat_id, safe="")
+        try:
+            if mode:
+                supabase_request(
+                    "bot_sessions?on_conflict=chat_id",
+                    method="POST",
+                    data={"chat_id": chat_id, "mode": mode},
+                    prefer="resolution=merge-duplicates,return=representation",
+                )
+            else:
+                supabase_request(f"bot_sessions?chat_id=eq.{encoded_id}", method="DELETE")
+        except Exception as exc:
+            print(f"Supabase bot session sync warning: {exc}")
+
+
+def get_bot_session_mode(chat_id: int) -> Optional[str]:
+    """Return a persisted Telegram mode, preferring Supabase in serverless deployments."""
+    chat_id = str(chat_id)
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            encoded_id = urllib.parse.quote(chat_id, safe="")
+            result = supabase_request(f"bot_sessions?chat_id=eq.{encoded_id}&select=mode&limit=1")
+            if result and isinstance(result, list):
+                return result[0].get("mode")
+        except Exception as exc:
+            print(f"Supabase bot session read warning: {exc}")
+
+    with get_connection() as conn:
+        row = conn.execute("SELECT mode FROM bot_sessions WHERE chat_id = ?", (chat_id,)).fetchone()
+    return row["mode"] if row else None
 
 def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal_type: str = "Прием пищи") -> int:
     """
@@ -190,13 +244,38 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
                 tot_p = 0.0
                 tot_f = 0.0
                 tot_c = 0.0
+                active_cal = 0.0
 
                 for m in sp_meals:
+                    is_active = m.get("notes") == "Активность"
                     for mi in m.get("meal_items", []):
-                        tot_cal += float(mi.get("calories", 0))
+                        cal = float(mi.get("calories", 0))
+                        tot_cal += cal
                         tot_p += float(mi.get("protein_g", 0))
                         tot_f += float(mi.get("fat_g", 0))
                         tot_c += float(mi.get("carbs_g", 0))
+                        if is_active:
+                            active_cal += abs(cal)
+
+                # Pull real user goals (incl. weight tracking) from Supabase instead of
+                # always returning the hardcoded defaults.
+                goals = dict(DEFAULT_GOALS)
+                goals.setdefault("weight_current", None)
+                goals.setdefault("weight_goal", None)
+                try:
+                    sp_goals = supabase_request("user_goals?select=*&order=id.desc&limit=1")
+                    if sp_goals and isinstance(sp_goals, list) and len(sp_goals) > 0:
+                        g = sp_goals[0]
+                        goals = {
+                            "calories": g.get("calories", DEFAULT_GOALS["calories"]),
+                            "protein_g": g.get("protein_g", DEFAULT_GOALS["protein_g"]),
+                            "fat_g": g.get("fat_g", DEFAULT_GOALS["fat_g"]),
+                            "carbs_g": g.get("carbs_g", DEFAULT_GOALS["carbs_g"]),
+                            "weight_current": g.get("weight_current"),
+                            "weight_goal": g.get("weight_goal"),
+                        }
+                except Exception as e:
+                    print(f"Supabase goals fetch error: {e}")
 
                 return {
                     "date": target_date,
@@ -204,7 +283,8 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
                     "total_protein": round(tot_p, 1),
                     "total_fat": round(tot_f, 1),
                     "total_carbs": round(tot_c, 1),
-                    "goals": DEFAULT_GOALS
+                    "active_calories": round(active_cal),
+                    "goals": goals
                 }
         except Exception as e:
             print(f"Supabase summary error: {e}")
@@ -365,51 +445,6 @@ def get_meals_for_days(days: int = 3) -> List[Dict[str, Any]]:
                 "total_carbs": int(round(sum(i["carbs_g"] for i in items))),
             })
         return result
-
-def save_custom_product(product_name: str, cal: float, p: float, f: float, c: float):
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO custom_products (product_name, calories_100g, protein_100g, fat_100g, carbs_100g)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(product_name) DO UPDATE SET
-                calories_100g = excluded.calories_100g,
-                protein_100g = excluded.protein_100g,
-                fat_100g = excluded.fat_100g,
-                carbs_100g = excluded.carbs_100g,
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            (product_name, cal, p, f, c)
-        )
-        conn.commit()
-
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            # Use upsert to avoid duplicate errors if possible
-            supabase_request("custom_products", method="POST", data={
-                "product_name": product_name,
-                "calories_100g": cal,
-                "protein_100g": p,
-                "fat_100g": f,
-                "carbs_100g": c
-            })
-        except Exception as e:
-            print(f"Supabase custom products sync warning: {e}")
-
-def get_custom_product(product_name: str) -> Optional[Dict[str, float]]:
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        row = cursor.execute("SELECT * FROM custom_products WHERE product_name = ?", (product_name,)).fetchone()
-        if row:
-            return {
-                "calories": float(row["calories_100g"]),
-                "protein": float(row["protein_100g"]),
-                "fat": float(row["fat_100g"]),
-                "carbs": float(row["carbs_100g"]),
-                "category": "custom"
-            }
-    return None
 
 def save_product_price(product_name: str, price_rub: float, weight_g: float, category: str = "general",
                        protein_100g: float = 0, fat_100g: float = 0, carbs_100g: float = 0, calories_100g: float = 0):

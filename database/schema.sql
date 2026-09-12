@@ -62,3 +62,9 @@ CREATE TABLE IF NOT EXISTS custom_products (
     carbs_100g REAL NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS bot_sessions (
+    chat_id TEXT PRIMARY KEY,
+    mode TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

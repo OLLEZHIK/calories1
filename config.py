@@ -11,7 +11,9 @@ if ENV_FILE.exists():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
-                os.environ[k.strip()] = v.strip()
+                # Explicit shell/Vercel variables take precedence over a local .env.
+                # This makes CI and diagnostic runs reproducible without editing secrets.
+                os.environ.setdefault(k.strip(), v.strip())
 
 IS_VERCEL = os.getenv("VERCEL", "0") == "1" or os.getenv("AWS_LAMBDA_FUNCTION_NAME") is not None
 if IS_VERCEL:

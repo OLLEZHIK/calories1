@@ -58,13 +58,12 @@ class TeamLeadAgent:
         Returns one of: 'food' | 'task' | 'summary' | 'coach' | None (uncertain)
         Falls back to None if no Gemini key — keyword matching takes over.
         """
-        gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
-        if not gemini_key:
+        from gemini_client import get_genai_client
+        client = get_genai_client()
+        if not client:
             return None
         try:
-            from google import genai
             from google.genai import types
-            client = genai.Client(api_key=gemini_key)
             model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
             prompt = f"""Classify this Russian message into exactly one category. Reply with ONLY the category word.
 
