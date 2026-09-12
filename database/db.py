@@ -237,7 +237,7 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
             # Use next-day boundary for reliable range filtering in PostgREST
             next_date = (date.fromisoformat(target_date) + timedelta(days=1)).isoformat()
             sp_meals = supabase_request(
-                f"meals?select=*,meal_items(*)&timestamp=gte.{target_date}&timestamp=lt.{next_date}"
+                f"meals?select=*,meal_items(*)&created_at=gte.{target_date}&created_at=lt.{next_date}"
             )
             if sp_meals is not None and isinstance(sp_meals, list):
                 tot_cal = 0.0
@@ -338,9 +338,9 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
 def get_recent_meals(limit: int = 10, target_date: str = None) -> List[Dict[str, Any]]:
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            url = f"meals?select=*,meal_items(*)&order=timestamp.desc&limit={limit}"
+            url = f"meals?select=*,meal_items(*)&order=created_at.desc&limit={limit}"
             if target_date:
-                url += f"&timestamp=gte.{target_date}T00:00:00&timestamp=lte.{target_date}T23:59:59"
+                url += f"&created_at=gte.{target_date}T00:00:00&created_at=lte.{target_date}T23:59:59"
             sp_meals = supabase_request(url)
             if sp_meals and isinstance(sp_meals, list) and len(sp_meals) > 0:
                 result = []
@@ -348,7 +348,7 @@ def get_recent_meals(limit: int = 10, target_date: str = None) -> List[Dict[str,
                     items = m.get("meal_items", [])
                     result.append({
                         "id": m.get("id"),
-                        "timestamp": (m.get("timestamp") or "")[:16].replace("T", " "),
+                        "timestamp": (m.get("created_at") or "")[:16].replace("T", " "),
                         "raw_input": m.get("raw_input"),
                         "input_type": m.get("input_type"),
                         "meal_type": m.get("notes") or "Прием пищи",
@@ -398,14 +398,14 @@ def get_meals_for_days(days: int = 3) -> List[Dict[str, Any]]:
     target_date = (date.today() - timedelta(days=days)).isoformat()
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            sp_meals = supabase_request(f"meals?select=*,meal_items(*)&timestamp=gte.{target_date}&order=timestamp.desc")
+            sp_meals = supabase_request(f"meals?select=*,meal_items(*)&created_at=gte.{target_date}&order=created_at.desc")
             if sp_meals and isinstance(sp_meals, list) and len(sp_meals) > 0:
                 result = []
                 for m in sp_meals:
                     items = m.get("meal_items", [])
                     result.append({
                         "id": m.get("id"),
-                        "timestamp": (m.get("timestamp") or "")[:16].replace("T", " "),
+                        "timestamp": (m.get("created_at") or "")[:16].replace("T", " "),
                         "raw_input": m.get("raw_input"),
                         "input_type": m.get("input_type"),
                         "meal_type": m.get("notes") or "Прием пищи",

@@ -77,12 +77,10 @@ CREATE TABLE IF NOT EXISTS public.bot_sessions (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- If this table already existed in your Supabase project (created before the
--- weight tracking feature was added), run this once in the Supabase SQL editor
--- to bring it up to date — CREATE TABLE IF NOT EXISTS above will not add columns
--- to an existing table:
--- ALTER TABLE public.user_goals ADD COLUMN IF NOT EXISTS weight_current NUMERIC;
--- ALTER TABLE public.user_goals ADD COLUMN IF NOT EXISTS weight_goal NUMERIC;
+-- Existing projects need these explicit migrations because CREATE TABLE IF NOT
+-- EXISTS does not add columns to a table that already exists.
+ALTER TABLE public.user_goals ADD COLUMN IF NOT EXISTS weight_current NUMERIC;
+ALTER TABLE public.user_goals ADD COLUMN IF NOT EXISTS weight_goal NUMERIC;
 
 -- Row Level Security (RLS) Policies (Enable public access for API Key usage)
 ALTER TABLE public.meals ENABLE ROW LEVEL SECURITY;
