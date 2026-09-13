@@ -237,7 +237,7 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
             # Use next-day boundary for reliable range filtering in PostgREST
             next_date = (date.fromisoformat(target_date) + timedelta(days=1)).isoformat()
             sp_meals = supabase_request(
-                f"meals?select=*,meal_items(*)&created_at=gte.{target_date}&created_at=lt.{next_date}"
+                f"meals?select=*,meal_items(*)&timestamp=gte.{target_date}&timestamp=lt.{next_date}"
             )
             if sp_meals is not None and isinstance(sp_meals, list):
                 tot_cal = 0.0
@@ -338,9 +338,9 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
 def get_recent_meals(limit: int = 10, target_date: str = None) -> List[Dict[str, Any]]:
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            url = f"meals?select=*,meal_items(*)&order=created_at.desc&limit={limit}"
+            url = f"meals?select=*,meal_items(*)&order=timestamp.desc&limit={limit}"
             if target_date:
-                url += f"&created_at=gte.{target_date}T00:00:00&created_at=lte.{target_date}T23:59:59"
+                url += f"&timestamp=gte.{target_date}T00:00:00&timestamp=lte.{target_date}T23:59:59"
             sp_meals = supabase_request(url)
             if sp_meals and isinstance(sp_meals, list) and len(sp_meals) > 0:
                 result = []
@@ -348,7 +348,7 @@ def get_recent_meals(limit: int = 10, target_date: str = None) -> List[Dict[str,
                     items = m.get("meal_items", [])
                     result.append({
                         "id": m.get("id"),
-                        "timestamp": (m.get("created_at") or "")[:16].replace("T", " "),
+                        "timestamp": (m.get("timestamp") or m.get("created_at") or "")[:16].replace("T", " "),
                         "raw_input": m.get("raw_input"),
                         "input_type": m.get("input_type"),
                         "meal_type": m.get("notes") or "Прием пищи",
@@ -398,14 +398,14 @@ def get_meals_for_days(days: int = 3) -> List[Dict[str, Any]]:
     target_date = (date.today() - timedelta(days=days)).isoformat()
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            sp_meals = supabase_request(f"meals?select=*,meal_items(*)&created_at=gte.{target_date}&order=created_at.desc")
+            sp_meals = supabase_request(f"meals?select=*,meal_items(*)&timestamp=gte.{target_date}&order=timestamp.desc")
             if sp_meals and isinstance(sp_meals, list) and len(sp_meals) > 0:
                 result = []
                 for m in sp_meals:
                     items = m.get("meal_items", [])
                     result.append({
                         "id": m.get("id"),
-                        "timestamp": (m.get("created_at") or "")[:16].replace("T", " "),
+                        "timestamp": (m.get("timestamp") or m.get("created_at") or "")[:16].replace("T", " "),
                         "raw_input": m.get("raw_input"),
                         "input_type": m.get("input_type"),
                         "meal_type": m.get("notes") or "Прием пищи",
@@ -448,6 +448,7 @@ def get_meals_for_days(days: int = 3) -> List[Dict[str, Any]]:
 
 def save_product_price(product_name: str, price_rub: float, weight_g: float, category: str = "general",
                        protein_100g: float = 0, fat_100g: float = 0, carbs_100g: float = 0, calories_100g: float = 0):
+    product_name = product_name.lower().strip()
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -459,6 +460,10 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float, cat
                 price_rub = excluded.price_rub,
                 weight_g = excluded.weight_g,
                 category = excluded.category,
+                protein_per_100g = CASE WHEN excluded.protein_per_100g > 0 THEN excluded.protein_per_100g ELSE product_prices.protein_per_100g END,
+                fat_per_100g = CASE WHEN excluded.fat_per_100g > 0 THEN excluded.fat_per_100g ELSE product_prices.fat_per_100g END,
+                carbs_per_100g = CASE WHEN excluded.carbs_per_100g > 0 THEN excluded.carbs_per_100g ELSE product_prices.carbs_per_100g END,
+                calories_per_100g = CASE WHEN excluded.calories_per_100g > 0 THEN excluded.calories_per_100g ELSE product_prices.calories_per_100g END,
                 updated_at = CURRENT_TIMESTAMP
             """,
             (product_name, category, price_rub, weight_g, protein_100g, fat_100g, carbs_100g, calories_100g)
@@ -467,7 +472,7 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float, cat
 
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            supabase_request("product_prices", method="POST", data={
+            supabase_request("product_prices?on_conflict=product_name", method="POST", data={
                 "product_name": product_name,
                 "category": category,
                 "price_rub": price_rub,
@@ -476,7 +481,7 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float, cat
                 "fat_per_100g": fat_100g,
                 "carbs_per_100g": carbs_100g,
                 "calories_per_100g": calories_100g
-            })
+            }, prefer="resolution=merge-duplicates,return=representation")
         except Exception as e:
             print(f"Supabase price sync warning: {e}")
 
@@ -491,6 +496,12 @@ def get_product_prices() -> List[Dict[str, Any]]:
                     f = float(d.get("fat_per_100g", 0))
                     c = float(d.get("carbs_per_100g", 0))
                     cal = float(d.get("calories_per_100g", 0))
+                    price_rub = float(d.get("price_rub", 0))
+                    weight_g = float(d.get("weight_g", 0))
+                    price_100g = float(d.get("price_per_100g") or 0)
+                    if price_100g <= 0 and weight_g > 0:
+                        price_100g = round((price_rub / weight_g) * 100, 2)
+                    d["price_per_100g"] = price_100g
 
                     protein_ratio = (p * 4.0) / cal if cal > 0 else 0.1
                     score = round(min(10.0, max(1.0, (protein_ratio * 12.0) + 3.0)), 1)
@@ -518,6 +529,12 @@ def get_product_prices() -> List[Dict[str, Any]]:
             f = float(d.get("fat_per_100g", 0))
             c = float(d.get("carbs_per_100g", 0))
             cal = float(d.get("calories_per_100g", 0))
+            price_rub = float(d.get("price_rub", 0))
+            weight_g = float(d.get("weight_g", 0))
+            price_100g = float(d.get("price_per_100g") or 0)
+            if price_100g <= 0 and weight_g > 0:
+                price_100g = round((price_rub / weight_g) * 100, 2)
+            d["price_per_100g"] = price_100g
 
             # Compute Nutrition Efficiency Index (1.0 to 10.0 scale)
             protein_ratio = (p * 4.0) / cal if cal > 0 else 0.1
@@ -545,7 +562,34 @@ def save_coach_recommendation(topic: str, recommendation: str, severity: str = "
         )
         conn.commit()
 
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            supabase_request("coach_recommendations", method="POST", data={
+                "topic": topic,
+                "recommendation": recommendation,
+                "severity": severity
+            })
+        except Exception as e:
+            print(f"Supabase coach sync warning: {e}")
+
 def get_recent_recommendations(limit: int = 5) -> List[Dict[str, Any]]:
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            sp_recs = supabase_request(f"coach_recommendations?select=*&order=timestamp.desc&limit={limit}")
+            if sp_recs and isinstance(sp_recs, list) and len(sp_recs) > 0:
+                return [
+                    {
+                        "id": r.get("id"),
+                        "timestamp": (r.get("timestamp") or "")[:16].replace("T", " "),
+                        "topic": r.get("topic", ""),
+                        "recommendation": r.get("recommendation", ""),
+                        "severity": r.get("severity", "info"),
+                    }
+                    for r in sp_recs
+                ]
+        except Exception as e:
+            print(f"Supabase recent recommendations warning: {e}")
+
     with get_connection() as conn:
         cursor = conn.cursor()
         rows = cursor.execute(

@@ -199,7 +199,8 @@ h1,h2,h3{margin:0; font-family:Oswald,"Golos Text",sans-serif; font-weight:600}
 // Live log poller from API
 async function loadAgentLogs() {
   try {
-    const res = await fetch('/api/summary');
+    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
+    const res = await fetch(`${apiBase}/api/summary`);
     if (res.ok) {
       const data = await res.json();
       renderLiveLogs(data);

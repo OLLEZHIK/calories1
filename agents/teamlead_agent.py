@@ -83,7 +83,8 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
                 contents=prompt,
                 config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=10)
             )
-            intent = (resp.text or "").strip().lower().split()[0]
+            tokens = (resp.text or "").strip().lower().split()
+            intent = tokens[0] if tokens else None
             if intent in ("food", "task", "summary", "coach", "price"):
                 return intent
         except Exception as e:
