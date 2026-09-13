@@ -135,6 +135,13 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
             delete_product(p_to_del)
             return f"✅ Продукт **{p_to_del.capitalize()}** успешно удален из базы и таблицы!\n\n{format_products_catalog()}"
 
+        if any(k in text_lower for k in [
+            "аудит", "проверь дубликаты", "проверь таблицу", "почисти повторы",
+            "проверь базу", "проверь продукты", "повторы", "/audit"
+        ]):
+            from agents.economy_agent import economy_agent
+            return economy_agent.run_audit_command()
+
         # ── LLM Intent Classification (Gemini) ──────────────────────────────
         # When GEMINI_API_KEY is set, Gemini classifies ANY natural language phrase.
         # This replaces brittle keyword matching for the majority of inputs.

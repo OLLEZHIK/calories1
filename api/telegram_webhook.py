@@ -298,6 +298,10 @@ class handler(BaseHTTPRequestHandler):
             p_to_del = m_del.group(1).strip()
             delete_product(p_to_del)
             return f"✅ Продукт **{p_to_del.capitalize()}** успешно удален из базы и таблицы!\n\n{format_products_catalog()}"
+        if text in ("🛡 Аудит базы", "🛡 Аудит каталога", "/audit", "проверь дубликаты", "проверь таблицу", "почисти повторы", "аудит"):
+            set_mode(chat_id, None)
+            from agents.economy_agent import economy_agent
+            return economy_agent.run_audit_command()
         if text in ("📋 Список продуктов", "/products", "продукты", "список продуктов"):
             set_mode(chat_id, None)
             return format_products_catalog()

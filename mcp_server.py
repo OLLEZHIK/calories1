@@ -40,6 +40,10 @@ def mcp_call(method: str, params: Dict[str, Any]) -> Dict[str, Any]:
         path = dashboard_agent.render()
         return {"status": "success", "dashboard_path": path}
 
+    elif method == "audit_catalog":
+        res = economy_agent.audit_and_clean_catalog()
+        return {"status": "success", "audit": res}
+
     else:
         return {"status": "error", "message": f"Unknown method {method}"}
 
@@ -53,6 +57,8 @@ if __name__ == "__main__":
             print(json.dumps(get_today_summary(), indent=2, ensure_ascii=False))
         elif cmd == "--coach":
             print(json.dumps(coach_agent.analyze(), indent=2, ensure_ascii=False))
+        elif cmd in ("--audit", "--audit-catalog"):
+            print(economy_agent.run_audit_command())
         elif cmd == "--dashboard":
             print(f"Dashboard updated: {dashboard_agent.render()}")
     else:

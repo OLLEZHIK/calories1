@@ -213,6 +213,12 @@ def start_bot():
                 )
                 return
 
+            if text in ("🛡 Аудит базы", "🛡 Аудит каталога", "/audit", "проверь дубликаты", "проверь таблицу", "почисти повторы", "аудит"):
+                from agents.economy_agent import economy_agent
+                report = economy_agent.run_audit_command()
+                await update.message.reply_markdown(report, reply_markup=main_keyboard)
+                return
+
             if text in ("📋 Список продуктов", "/products", "продукты", "список продуктов"):
                 await products_command(update, context)
                 return

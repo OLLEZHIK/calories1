@@ -451,6 +451,11 @@ Return ONLY a valid JSON object in this exact format:
     if price is not None:
         price_per_100g = round((price / weight_g) * 100, 2)
         save_product_price(product_name, price, weight_g, category, p_100, f_100, c_100, cal_100, coach_score, coach_verdict)
+        try:
+            from agents.economy_agent import economy_agent
+            economy_agent.audit_and_clean_catalog()
+        except Exception as e:
+            print(f"Catalog audit warning: {e}")
 
     # Calculate totals for entire package/weight
     ratio = weight_g / 100.0

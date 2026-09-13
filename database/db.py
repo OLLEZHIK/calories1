@@ -4,6 +4,7 @@ import re
 import urllib.request
 import urllib.error
 import urllib.parse
+from difflib import SequenceMatcher
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date, timedelta
 from config import DB_PATH, SUPABASE_URL, SUPABASE_KEY, USE_SUPABASE, DEFAULT_GOALS
@@ -70,10 +71,102 @@ def init_db():
             pass
 
 
+def stem_product_word(w: str) -> str:
+    """Stem Russian food words by stripping adjective and plural/case endings."""
+    w = w.strip().lower()
+    w = re.sub(r'(?:ые|ие|ое|ее|ая|яя|ый|ий|ой|ых|их|ым|им|ую|юю)$', '', w)
+    w = re.sub(r'(?:ами|ями|ов|ев|ей|ам|ям|ах|ях)$', '', w)
+    w = re.sub(r'(?:цы|ки|лы|ры|сы|ты|ды|бы|пы|мы|ны|вы|зы)$', lambda m: m.group(0)[0], w)
+    w = re.sub(r'(?:ца|ки|ка|ко|це|цо|це|о|е|а|я|ы|и)$', '', w)
+    return w
+
+
+def are_product_duplicates(name1: str, name2: str) -> bool:
+    """
+    Checks if two product names refer to the same food item:
+    1. Exact lower-case match.
+    2. Normalized token set match (ignoring word order and Russian plural/case inflections).
+    3. High fuzzy string similarity (> 0.82).
+    """
+    n1 = name1.strip().lower()
+    n2 = name2.strip().lower()
+    if n1 == n2:
+        return True
+
+    toks1 = sorted([stem_product_word(t) for t in re.sub(r'[^\w\s%]', ' ', n1).split() if len(t) > 1])
+    toks2 = sorted([stem_product_word(t) for t in re.sub(r'[^\w\s%]', ' ', n2).split() if len(t) > 1])
+    if toks1 and toks2 and toks1 == toks2:
+        return True
+
+    if SequenceMatcher(None, n1, n2).ratio() > 0.82:
+        return True
+
+    return False
+
+
+def validate_product_values(protein_100g: float, fat_100g: float, carbs_100g: float,
+                            calories_100g: float, price_rub: float = 0.0, weight_g: float = 100.0,
+                            coach_score: int = 0) -> Dict[str, Any]:
+    """
+    Sanitizes and enforces physical & nutritional constraints:
+    - P, F, C >= 0.
+    - P + F + C <= 100g per 100g (normalized if exceeded).
+    - Calories = 4*P + 9*F + 4*C (aligned if <= 0 or > 20% deviation).
+    - Calories clamped to max 900 kcal (pure fat).
+    - Weight > 0 (defaults to 100g), price >= 0.
+    - Coach score clamped to [1, 10] if set.
+    """
+    p = max(0.0, float(protein_100g or 0))
+    f = max(0.0, float(fat_100g or 0))
+    c = max(0.0, float(carbs_100g or 0))
+
+    tot_m = p + f + c
+    if tot_m > 100.0:
+        ratio = 100.0 / tot_m
+        p = round(p * ratio, 1)
+        f = round(f * ratio, 1)
+        c = round(c * ratio, 1)
+
+    expected_cal = int(round((p * 4.0) + (f * 9.0) + (c * 4.0)))
+    cal = float(calories_100g or 0)
+    if cal <= 0 or (expected_cal > 0 and abs(cal - expected_cal) / max(1.0, cal) > 0.20):
+        cal = expected_cal
+    cal = min(900, max(0, int(round(cal))))
+
+    w = max(1.0, float(weight_g or 100.0))
+    pr = max(0.0, float(price_rub or 0.0))
+    score = int(coach_score or 0)
+    if score > 0:
+        score = min(10, max(1, score))
+
+    return {
+        "protein_100g": p,
+        "fat_100g": f,
+        "carbs_100g": c,
+        "calories_100g": cal,
+        "price_rub": pr,
+        "weight_g": w,
+        "coach_score": score
+    }
+
+
 def save_custom_product(product_name: str, cal_100: float, p_100: float, f_100: float, c_100: float):
     product_name = product_name.lower().strip()
+    val = validate_product_values(protein_100g=p_100, fat_100g=f_100, carbs_100g=c_100, calories_100g=cal_100)
+    cal_100 = val["calories_100g"]
+    p_100 = val["protein_100g"]
+    f_100 = val["fat_100g"]
+    c_100 = val["carbs_100g"]
+
     with get_connection() as conn:
         cursor = conn.cursor()
+        rows = cursor.execute("SELECT product_name FROM custom_products").fetchall()
+        for r in rows:
+            ex_name = r["product_name"]
+            if ex_name != product_name and are_product_duplicates(ex_name, product_name):
+                product_name = ex_name
+                break
+
         cursor.execute('''
             INSERT INTO custom_products (product_name, calories_100g, protein_100g, fat_100g, carbs_100g)
             VALUES (?, ?, ?, ?, ?)
@@ -504,12 +597,37 @@ def delete_product(product_name: str) -> bool:
 
 
 
-def save_product_price(product_name: str, price_rub: float, weight_g: float, category: str = "general",
-                       protein_100g: float = 0, fat_100g: float = 0, carbs_100g: float = 0, calories_100g: float = 0,
-                       coach_score: int = 0, coach_verdict: str = ""):
+def save_product_price(product_name: str, price_rub: float, weight_g: float = 100.0,
+                       category: str = "general", protein_100g: float = 0, fat_100g: float = 0,
+                       carbs_100g: float = 0, calories_100g: float = 0, coach_score: int = 0,
+                       coach_verdict: str = ""):
     product_name = product_name.lower().strip()
+    val = validate_product_values(
+        protein_100g=protein_100g,
+        fat_100g=fat_100g,
+        carbs_100g=carbs_100g,
+        calories_100g=calories_100g,
+        price_rub=price_rub,
+        weight_g=weight_g,
+        coach_score=coach_score
+    )
+    protein_100g = val["protein_100g"]
+    fat_100g = val["fat_100g"]
+    carbs_100g = val["carbs_100g"]
+    calories_100g = val["calories_100g"]
+    price_rub = val["price_rub"]
+    weight_g = val["weight_g"]
+    coach_score = val["coach_score"]
+
     with get_connection() as conn:
         cursor = conn.cursor()
+        rows = cursor.execute("SELECT product_name FROM product_prices").fetchall()
+        for r in rows:
+            ex_name = r["product_name"]
+            if ex_name != product_name and are_product_duplicates(ex_name, product_name):
+                product_name = ex_name
+                break
+
         cursor.execute(
             """
             INSERT INTO product_prices 
