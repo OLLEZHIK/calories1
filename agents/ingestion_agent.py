@@ -273,11 +273,40 @@ Return ONLY valid JSON, no markdown, no explanation:
 ingestion_agent = IngestionAgent()
 
 
+def _evaluate_fallback_coach(product_name: str, cal_100: float, p_100: float, f_100: float, c_100: float, category: str):
+    prot_cal = p_100 * 4.0
+    fat_cal = f_100 * 9.0
+    carb_cal = c_100 * 4.0
+    tot_cal = max(cal_100, prot_cal + fat_cal + carb_cal, 1.0)
+    prot_ratio = prot_cal / tot_cal
+
+    if category == "sweets" or (c_100 > 40 and f_100 > 15):
+        score = 2
+        verdict = f"Десерт с избытком сахаров ({c_100:.0f}г) и насыщенных жиров ({f_100:.0f}г). Провоцирует скачки инсулина и отложение жира. Употребляйте умеренно и редко."
+    elif prot_ratio >= 0.45:
+        score = 10
+        verdict = f"Превосходный источник чистого белка ({p_100:.1f}г). Идеально подходит для насыщения, защиты мышц и похудения."
+    elif prot_ratio >= 0.25:
+        score = 8
+        verdict = f"Качественный белковый продукт ({p_100:.1f}г белка). Отлично вписывается в сбалансированный спортивный рацион."
+    elif category in ["vegetables", "fruit"]:
+        score = 8
+        verdict = "Богат витаминами и клетчаткой, полезен для пищеварения и иммунитета."
+    elif fat_cal / tot_cal > 0.65:
+        score = 4
+        verdict = f"Высокая плотность жиров ({f_100:.1f}г). Контролируйте размер порции, чтобы не выбиться из дневного калоража."
+    else:
+        score = 6
+        verdict = "Базовый продукт питания. Употребляйте в рамках вашей дневной нормы калорий и БЖУ."
+    return score, verdict
+
+
 def process_add_product(raw_text: str = "", image_bytes: bytes = None) -> str:
     """
     Multimodal AI product processing (via Gemini 3.6 Flash).
     Analyzes packaging photos, price tags, text, or voice transcripts to extract
-    product name, weight, price, and exact or estimated macros per 100g.
+    product name, weight, price in EUR (€), exact or estimated macros per 100g,
+    and a personal trainer health/fitness utility rating (1-10 + verdict).
     Saves to both custom_products and product_prices tables in SQLite and Supabase.
     """
     from gemini_client import get_genai_client
@@ -291,22 +320,28 @@ def process_add_product(raw_text: str = "", image_bytes: bytes = None) -> str:
             from google.genai import types
             model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
-            sys_prompt = """You are an expert nutrition, culinary, and product cataloging AI.
+            sys_prompt = """You are an expert nutrition and personal fitness trainer AI.
 The user is adding a food item to their personal database using a description, speech transcript, photo of packaging/nutrition table, photo of price tag, or photo of the food.
 
-Your task is to analyze the input and extract or realistically estimate the product's nutritional values and pricing.
+Your task is to analyze the input and extract or realistically estimate the product's nutritional values, price in EUR (€), and coach health utility score.
 
-RULES:
-1. "product_name": Clean, concise Russian name (e.g. "Торт Медовик", "Творог 5%", "Овсяное печенье").
+CRITICAL RULES:
+1. "product_name": Clean, concise Russian name (e.g. "Торт Медовик", "Творог 5%", "Куриное филе").
    STRIP ALL conversational filler like "запиши в список", "добавь", "купил", "цена за", "стоит", etc.
 2. "weight_g": Total net weight of the product or package in grams (e.g., 800g -> 800, 1kg -> 1000, 500г -> 500). If not mentioned or visible, default to 100.
-3. "price": Numeric price if mentioned or shown on price tag, or null.
-4. "currency": "€" if euro/евро, "$" if dollar, or "руб" (default to "руб" if price is given without currency or in rubles).
+3. "price": Numeric price in EUR (€). If currency is not stated or given in rubles/other, convert or normalize to numeric EUR (e.g., 7.5).
+4. "currency": Always "€".
 5. "calories_100g", "protein_100g", "fat_100g", "carbs_100g":
    - If visible on nutrition table in photo or stated by user in text, extract EXACT numbers per 100g.
-   - If NOT stated, use your expert culinary knowledge to provide ACCURATE, REALISTIC nutritional values per 100g for this specific product (e.g., for "Торт Медовик": calories ~390, protein ~5.5, fat ~19, carbs ~54).
+   - If NOT stated, use your expert culinary and nutritional knowledge to provide ACCURATE, REALISTIC values per 100g for this specific product (e.g., for "Торт Медовик": calories ~390, protein ~5.5, fat ~16, carbs ~56).
 6. "category": Choose best fit from: "meat", "fish", "eggs_dairy", "fats_oils", "vegetables", "fruit", "grains", "bakery", "sweets", "general".
-7. "is_estimated": true if macros were estimated by AI; false if read directly from package table/user input.
+7. "coach_score": An integer from 1 to 10 evaluating the product's nutritional fitness value and healthiness for a person aiming for fitness, weight loss, or muscle health:
+   - 1-3: High sugar, trans/saturated fats, ultra-processed empty calories (e.g. sweets, fast food).
+   - 4-6: Moderate or calorie-dense, acceptable in moderation.
+   - 7-8: Wholesome nutrient-dense whole food (whole grains, vegetables, fruit, natural dairy).
+   - 9-10: Elite fitness foods (lean chicken breast, white/salmon fish, eggs, low-fat cottage cheese).
+8. "coach_verdict": 1-2 concise Russian sentences from a personal fitness trainer with clear advice on this product, analyzing the BJU ratio and fitness impact.
+9. "is_estimated": true if macros were estimated by AI; false if read directly from package table/user input.
 
 Return ONLY a valid JSON object in this exact format:
 {
@@ -317,15 +352,17 @@ Return ONLY a valid JSON object in this exact format:
   "currency": "€",
   "calories_100g": 390.0,
   "protein_100g": 5.5,
-  "fat_100g": 19.0,
-  "carbs_100g": 54.0,
+  "fat_100g": 16.0,
+  "carbs_100g": 56.0,
+  "coach_score": 2,
+  "coach_verdict": "Высококалорийный десерт с избытком простых сахаров и насыщенных жиров при крайне низком белке. Провоцирует скачки инсулина и отложение жира.",
   "is_estimated": true
 }"""
 
             user_parts = []
             if image_bytes:
                 user_parts.append(types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"))
-            user_parts.append(types.Part.from_text(text=raw_text or "Извлеки информацию о продукте, весе, цене и КБЖУ."))
+            user_parts.append(types.Part.from_text(text=raw_text or "Извлеки информацию о продукте, весе, цене в евро и КБЖУ, а также дай оценку тренера."))
 
             resp = client.models.generate_content(
                 model=model,
@@ -354,7 +391,6 @@ Return ONLY a valid JSON object in this exact format:
         p_name = p_info["product_name"] if p_info else (raw_text or "Новый продукт")
         w_g = p_info["weight_g"] if p_info else 100.0
         price_val = p_info["price"] if p_info else None
-        curr = p_info["currency"] if p_info else "руб"
 
         from agents.nutrition_agent import nutrition_agent
         calc = nutrition_agent.calculate([{"product_name": p_name, "quantity_g": 100}])
@@ -364,11 +400,13 @@ Return ONLY a valid JSON object in this exact format:
             "category": m.get("category", "general"),
             "weight_g": w_g,
             "price": price_val,
-            "currency": curr,
+            "currency": "€",
             "calories_100g": m.get("calories", 150),
             "protein_100g": m.get("protein_g", 5),
             "fat_100g": m.get("fat_g", 5),
             "carbs_100g": m.get("carbs_g", 20),
+            "coach_score": None,
+            "coach_verdict": "",
             "is_estimated": True
         }
 
@@ -378,7 +416,7 @@ Return ONLY a valid JSON object in this exact format:
     if weight_g <= 0:
         weight_g = 100.0
     price = float(parsed_data["price"]) if parsed_data.get("price") is not None else None
-    currency = parsed_data.get("currency", "руб")
+    currency = "€"
     cal_100 = float(parsed_data.get("calories_100g") or 0.0)
     p_100 = float(parsed_data.get("protein_100g") or 0.0)
     f_100 = float(parsed_data.get("fat_100g") or 0.0)
@@ -397,6 +435,14 @@ Return ONLY a valid JSON object in this exact format:
             c_100 = float(m.get("carbs_g", 0))
             is_estimated = True
 
+    # Coach evaluation: calculate fallback if missing
+    coach_score = int(parsed_data.get("coach_score") or 0)
+    coach_verdict = (parsed_data.get("coach_verdict") or "").strip()
+    if coach_score <= 0 or not coach_verdict:
+        f_score, f_verdict = _evaluate_fallback_coach(product_name, cal_100, p_100, f_100, c_100, category)
+        coach_score = coach_score or f_score
+        coach_verdict = coach_verdict or f_verdict
+
     # Save to custom_products
     save_custom_product(product_name, cal_100, p_100, f_100, c_100)
 
@@ -404,7 +450,7 @@ Return ONLY a valid JSON object in this exact format:
     price_per_100g = None
     if price is not None:
         price_per_100g = round((price / weight_g) * 100, 2)
-        save_product_price(product_name, price, weight_g, category, p_100, f_100, c_100, cal_100)
+        save_product_price(product_name, price, weight_g, category, p_100, f_100, c_100, cal_100, coach_score, coach_verdict)
 
     # Calculate totals for entire package/weight
     ratio = weight_g / 100.0
@@ -415,29 +461,75 @@ Return ONLY a valid JSON object in this exact format:
 
     macro_tag = " *(оценка ИИ)*" if is_estimated else ""
 
-    lines = [
-        "✅ **Продукт успешно добавлен в базу!**\n",
-        f"📦 **Название**: `{product_name}`",
-        f"⚖️ **Вес упаковки**: {int(round(weight_g))} г",
-    ]
-    if price is not None:
-        lines.append(f"💵 **Стоимость**: {price} {currency} ({price_per_100g} {currency} за 100г)")
+    if coach_score >= 8:
+        score_badge = "🟢 Отличный выбор"
+    elif coach_score >= 5:
+        score_badge = "🟡 Умеренно"
+    else:
+        score_badge = "🔴 Не рекомендуется"
 
-    lines.extend([
-        f"\n📊 **КБЖУ на 100г**{macro_tag}:",
-        f"🔥 Калории: {int(round(cal_100))} ккал",
-        f"🥩 Белки: {round(p_100, 1)} г",
-        f"🥑 Жиры: {round(f_100, 1)} г",
-        f"🍚 Углеводы: {round(c_100, 1)} г",
-    ])
+    price_str = f"{price:.2f} €" if price is not None else "Не указана"
+    price_100_str = f" ({price_per_100g:.2f} € за 100г)" if price_per_100g is not None else ""
+
+    lines = [
+        "✅ **Продукт добавлен в базу:**\n",
+        f"• **Название продукта:** {product_name}",
+        f"• **Калорийность на 100 грамм:** {int(round(cal_100))} ккал{macro_tag}",
+        f"• **Белки на 100 грамм:** {round(p_100, 1)} г",
+        f"• **Жиры на 100 грамм:** {round(f_100, 1)} г",
+        f"• **Углеводы на 100 грамм:** {round(c_100, 1)} г",
+    ]
 
     if abs(weight_g - 100.0) > 1.0:
-        lines.extend([
-            f"\n🍱 **На всю упаковку ({int(round(weight_g))}г)**:",
-            f"🔥 {total_cal} ккал | Б: {total_p}г | Ж: {total_f}г | У: {total_c}г",
-        ])
+        lines.append(
+            f"• **Пищевая ценность упаковки ({int(round(weight_g))} г):** "
+            f"{total_cal} ккал | Б: {total_p} г | Ж: {total_f} г | У: {total_c} г"
+        )
 
-    lines.append("\n💾 Продукт сохранён в личную базу и список цен. Теперь вы можете записывать его в рацион (например: *«съел 200г торта медовик»*).")
-    lines.append("\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)")
+    lines.append(f"• **Цена:** {price_str}{price_100_str}")
+    lines.append(f"• **Оценка полезности от тренера:** {coach_score}/10 ({score_badge})")
+    lines.append(f"  _«{coach_verdict}»_")
 
+    lines.append(f"\n💾 Продукт сохранён. Теперь можно просто писать в рацион: *«съел 150г {product_name.lower()}»*.")
+    lines.append("🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)")
+
+    return "\n".join(lines)
+
+
+def format_products_catalog() -> str:
+    """Format the full list of products stored in database with macros in 100g, EUR price, and coach rating."""
+    from database.db import get_product_prices
+    products = get_product_prices()
+    if not products:
+        return (
+            "📋 **В вашей базе пока нет продуктов.**\n\n"
+            "Нажмите кнопку **«➕ Добавить продукт»**, чтобы добавить первый продукт (текстом, голосом или фото)!"
+        )
+
+    lines = ["📋 **Список продуктов в вашей базе:**\n"]
+    for i, p in enumerate(products, 1):
+        name = p.get("product_name", "Продукт").capitalize()
+        cal = p.get("calories_per_100g", 0)
+        prot = p.get("protein_per_100g", 0)
+        fat = p.get("fat_per_100g", 0)
+        carb = p.get("carbs_per_100g", 0)
+        weight = int(round(float(p.get("weight_g", 100) or 100)))
+        price_tot = float(p.get("price_rub", 0) or 0)
+        price_100 = float(p.get("price_per_100g", 0) or 0)
+        score = int(p.get("coach_score") or p.get("efficiency_score") or 5)
+        badge = "🟢" if score >= 8 else ("🟡" if score >= 5 else "🔴")
+        verdict = p.get("coach_verdict") or ""
+
+        lines.append(f"{i}. **{name}**")
+        lines.append(f"   • Калорийность: {cal} ккал / 100г")
+        lines.append(f"   • Белки: {prot} г | Жиры: {fat} г | Углеводы: {carb} г")
+        if price_tot > 0:
+            lines.append(f"   • Цена: {price_tot:.2f} € за {weight}г ({price_100:.2f} € за 100г)")
+        lines.append(f"   • Оценка тренера: {badge} {score}/10")
+        if verdict:
+            lines.append(f"     _«{verdict}»_")
+        lines.append("")
+
+    lines.append("💡 Чтобы добавить продукт, нажмите кнопку **«➕ Добавить продукт»**.")
+    lines.append("🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)")
     return "\n".join(lines)

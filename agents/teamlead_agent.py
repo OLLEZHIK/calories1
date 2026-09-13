@@ -105,10 +105,17 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
         # Guard: reject UI button texts that must never reach the food pipeline
         NON_FOOD_UI_TEXTS = [
             "запись приема пищи", "технический таск",
-            "итоги за сегодня", "советы ии-тренера"
+            "итоги за сегодня", "советы ии-тренера", "список продуктов"
         ]
         if any(text_lower == t for t in NON_FOOD_UI_TEXTS):
+            if text_lower == "список продуктов":
+                from agents.ingestion_agent import format_products_catalog
+                return format_products_catalog()
             return "👇 Нажмите одну из кнопок ниже чтобы начать."
+
+        if any(k in text_lower for k in ["список продуктов", "база продуктов", "мои продукты"]):
+            from agents.ingestion_agent import format_products_catalog
+            return format_products_catalog()
 
         # ── LLM Intent Classification (Gemini) ──────────────────────────────
         # When GEMINI_API_KEY is set, Gemini classifies ANY natural language phrase.

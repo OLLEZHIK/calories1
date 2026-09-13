@@ -1,5 +1,6 @@
 import sqlite3
 import json
+import re
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -18,7 +19,8 @@ def supabase_request(
     if not USE_SUPABASE or not SUPABASE_URL or not SUPABASE_KEY:
         return None
 
-    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{endpoint}"
+    quoted_endpoint = urllib.parse.quote(endpoint, safe="/?=&:*+,%")
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/{quoted_endpoint}"
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -59,6 +61,13 @@ def init_db():
             conn.commit()
         except sqlite3.OperationalError:
             pass # Column already exists
+
+        try:
+            conn.execute("ALTER TABLE product_prices ADD COLUMN coach_score INTEGER DEFAULT 0")
+            conn.execute("ALTER TABLE product_prices ADD COLUMN coach_verdict TEXT DEFAULT ''")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
 
 
 def save_custom_product(product_name: str, cal_100: float, p_100: float, f_100: float, c_100: float):
@@ -447,15 +456,16 @@ def get_meals_for_days(days: int = 3) -> List[Dict[str, Any]]:
         return result
 
 def save_product_price(product_name: str, price_rub: float, weight_g: float, category: str = "general",
-                       protein_100g: float = 0, fat_100g: float = 0, carbs_100g: float = 0, calories_100g: float = 0):
+                       protein_100g: float = 0, fat_100g: float = 0, carbs_100g: float = 0, calories_100g: float = 0,
+                       coach_score: int = 0, coach_verdict: str = ""):
     product_name = product_name.lower().strip()
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
             INSERT INTO product_prices 
-            (product_name, category, price_rub, weight_g, protein_per_100g, fat_per_100g, carbs_per_100g, calories_per_100g)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (product_name, category, price_rub, weight_g, protein_per_100g, fat_per_100g, carbs_per_100g, calories_per_100g, coach_score, coach_verdict)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(product_name) DO UPDATE SET
                 price_rub = excluded.price_rub,
                 weight_g = excluded.weight_g,
@@ -464,11 +474,21 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float, cat
                 fat_per_100g = CASE WHEN excluded.fat_per_100g > 0 THEN excluded.fat_per_100g ELSE product_prices.fat_per_100g END,
                 carbs_per_100g = CASE WHEN excluded.carbs_per_100g > 0 THEN excluded.carbs_per_100g ELSE product_prices.carbs_per_100g END,
                 calories_per_100g = CASE WHEN excluded.calories_per_100g > 0 THEN excluded.calories_per_100g ELSE product_prices.calories_per_100g END,
+                coach_score = CASE WHEN excluded.coach_score > 0 THEN excluded.coach_score ELSE product_prices.coach_score END,
+                coach_verdict = CASE WHEN length(excluded.coach_verdict) > 0 THEN excluded.coach_verdict ELSE product_prices.coach_verdict END,
                 updated_at = CURRENT_TIMESTAMP
             """,
-            (product_name, category, price_rub, weight_g, protein_100g, fat_100g, carbs_100g, calories_100g)
+            (product_name, category, price_rub, weight_g, protein_100g, fat_100g, carbs_100g, calories_100g, coach_score, coach_verdict)
         )
         conn.commit()
+
+    if coach_verdict:
+        severity = "info" if coach_score >= 7 else ("warning" if coach_score <= 4 else "tip")
+        save_coach_recommendation(
+            topic=f"Продукт: {product_name.capitalize()} ({coach_score}/10)",
+            recommendation=coach_verdict,
+            severity=severity
+        )
 
     if SUPABASE_URL and SUPABASE_KEY:
         try:
@@ -485,7 +505,49 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float, cat
         except Exception as e:
             print(f"Supabase price sync warning: {e}")
 
+def _load_coach_product_verdicts() -> Dict[str, Dict[str, Any]]:
+    verdicts: Dict[str, Dict[str, Any]] = {}
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            recs = supabase_request("coach_recommendations?topic=ilike.*Продукт*&order=id.desc")
+            if recs and isinstance(recs, list):
+                for r in recs:
+                    top = r.get("topic", "")
+                    if "(" in top and "/10" in top:
+                        m = re.search(r"Продукт:\s*(.+?)\s*\((\d+)/10\)", top)
+                        if m:
+                            p_name = m.group(1).strip().lower()
+                            if p_name not in verdicts:
+                                verdicts[p_name] = {"score": int(m.group(2)), "verdict": r.get("recommendation", "")}
+                    elif top.startswith("Продукт:"):
+                        p_name = top.split("Продукт:", 1)[1].strip().lower()
+                        if p_name not in verdicts:
+                            verdicts[p_name] = {"score": None, "verdict": r.get("recommendation", "")}
+        except Exception:
+            pass
+
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            rows = cursor.execute("SELECT topic, recommendation FROM coach_recommendations WHERE topic LIKE 'Продукт:%' ORDER BY id DESC").fetchall()
+            for r in rows:
+                top = r["topic"]
+                if "(" in top and "/10" in top:
+                    m = re.search(r"Продукт:\s*(.+?)\s*\((\d+)/10\)", top)
+                    if m:
+                        p_name = m.group(1).strip().lower()
+                        if p_name not in verdicts:
+                            verdicts[p_name] = {"score": int(m.group(2)), "verdict": r["recommendation"]}
+                elif top.startswith("Продукт:"):
+                    p_name = top.split("Продукт:", 1)[1].strip().lower()
+                    if p_name not in verdicts:
+                        verdicts[p_name] = {"score": None, "verdict": r["recommendation"]}
+    except Exception:
+        pass
+    return verdicts
+
 def get_product_prices() -> List[Dict[str, Any]]:
+    coach_verdicts = _load_coach_product_verdicts()
     if SUPABASE_URL and SUPABASE_KEY:
         try:
             sp_products = supabase_request("product_prices?select=*&order=product_name.asc")
@@ -502,17 +564,23 @@ def get_product_prices() -> List[Dict[str, Any]]:
                     if price_100g <= 0 and weight_g > 0:
                         price_100g = round((price_rub / weight_g) * 100, 2)
                     d["price_per_100g"] = price_100g
+                    d["currency"] = "€"
 
                     protein_ratio = (p * 4.0) / cal if cal > 0 else 0.1
                     score = round(min(10.0, max(1.0, (protein_ratio * 12.0) + 3.0)), 1)
                     badge_class = "good" if score >= 7.5 else ("warn" if score >= 5.0 else "crit")
                     label = "Высокий" if score >= 7.5 else ("Средний" if score >= 5.0 else "Низкий")
 
+                    p_name = d.get("product_name", "").strip().lower()
+                    c_info = coach_verdicts.get(p_name, {})
+
                     d["calories_per_100g"] = int(round(cal))
                     d["protein_per_100g"] = int(round(p))
                     d["fat_per_100g"] = int(round(f))
                     d["carbs_per_100g"] = int(round(c))
                     d["efficiency_score"] = score
+                    d["coach_score"] = int(d.get("coach_score") or c_info.get("score") or round(score))
+                    d["coach_verdict"] = d.get("coach_verdict") or c_info.get("verdict") or ""
                     d["efficiency_label"] = label
                     d["badge_class"] = badge_class
                     result.append(d)
@@ -535,6 +603,7 @@ def get_product_prices() -> List[Dict[str, Any]]:
             if price_100g <= 0 and weight_g > 0:
                 price_100g = round((price_rub / weight_g) * 100, 2)
             d["price_per_100g"] = price_100g
+            d["currency"] = "€"
 
             # Compute Nutrition Efficiency Index (1.0 to 10.0 scale)
             protein_ratio = (p * 4.0) / cal if cal > 0 else 0.1
@@ -543,11 +612,16 @@ def get_product_prices() -> List[Dict[str, Any]]:
             badge_class = "good" if score >= 7.5 else ("warn" if score >= 5.0 else "crit")
             label = "Высокий" if score >= 7.5 else ("Средний" if score >= 5.0 else "Низкий")
 
+            p_name = d.get("product_name", "").strip().lower()
+            c_info = coach_verdicts.get(p_name, {})
+
             d["calories_per_100g"] = int(round(cal))
             d["protein_per_100g"] = int(round(p))
             d["fat_per_100g"] = int(round(f))
             d["carbs_per_100g"] = int(round(c))
             d["efficiency_score"] = score
+            d["coach_score"] = int(d.get("coach_score") or c_info.get("score") or round(score))
+            d["coach_verdict"] = d.get("coach_verdict") or c_info.get("verdict") or ""
             d["efficiency_label"] = label
             d["badge_class"] = badge_class
             result.append(d)

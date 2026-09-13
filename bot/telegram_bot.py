@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agents.economy_agent import economy_agent
 from agents.coach_agent import coach_agent
 from agents.audio_agent import audio_agent
-from agents.ingestion_agent import process_add_product
+from agents.ingestion_agent import process_add_product, format_products_catalog
 from database.db import save_meal, get_today_summary
 
 logging.basicConfig(level=logging.INFO)
@@ -52,7 +52,7 @@ def start_bot():
             [
                 ["🍲 Запись приема пищи", "➕ Добавить продукт"],
                 ["📊 Итоги за сегодня",  "💡 Советы ИИ-тренера"],
-                ["👨‍💼 Технический таск"]
+                ["📋 Список продуктов", "👨‍💼 Технический таск"]
             ],
             resize_keyboard=True
         )
@@ -108,6 +108,11 @@ def start_bot():
                 reply_markup=main_keyboard
             )
 
+        # ── /products ─────────────────────────────────────────────────────
+        async def products_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            set_mode(context, None)
+            await update.message.reply_markdown(format_products_catalog(), reply_markup=main_keyboard)
+
         # ── Text handler ──────────────────────────────────────────────────
         async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (update.message.text or "").strip()
@@ -147,6 +152,10 @@ def start_bot():
                     "ИИ распознает данные или автоматически рассчитает пищевую ценность!",
                     reply_markup=main_keyboard
                 )
+                return
+
+            if text in ("📋 Список продуктов", "/products", "продукты", "список продуктов"):
+                await products_command(update, context)
                 return
 
             if text in ("📊 Итоги за сегодня", "/summary"):
@@ -243,6 +252,7 @@ def start_bot():
         app.add_handler(CommandHandler("start", start_command))
         app.add_handler(CommandHandler("summary", summary_command))
         app.add_handler(CommandHandler("coach", coach_command))
+        app.add_handler(CommandHandler("products", products_command))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         app.add_handler(MessageHandler(filters.VOICE, handle_voice))
         app.add_handler(MessageHandler(filters.PHOTO, handle_photo))

@@ -33,8 +33,8 @@ def run_test():
     print(f"Total Carbs: {summary['total_carbs']}g")
 
     # 3. Test Price Recording & Economy Analysis
-    economy_agent.record_price("творог 5%", price_rub=120, weight_g=200, protein_100g=18, fat_100g=5, carbs_100g=3)
-    economy_agent.record_price("куриная грудка", price_rub=350, weight_g=1000, protein_100g=31, fat_100g=3.6, carbs_100g=0)
+    economy_agent.record_price("творог 5%", price_rub=1.50, weight_g=200, protein_100g=18, fat_100g=5, carbs_100g=3, calories_100g=130)
+    economy_agent.record_price("куриная грудка", price_rub=8.50, weight_g=1000, protein_100g=31, fat_100g=3.6, carbs_100g=0, calories_100g=156)
     econ_stats = economy_agent.analyze_economy()
     print("\n--- Economy Analysis ---")
     print(f"Best Protein Sources: {econ_stats['best_protein_sources']}")

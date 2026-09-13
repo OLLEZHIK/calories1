@@ -10,7 +10,7 @@ import urllib.request
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agents.audio_agent import audio_agent
-from agents.ingestion_agent import process_add_product
+from agents.ingestion_agent import process_add_product, format_products_catalog
 from bot.telegram_bot import process_task_input, process_user_meal_input
 from database.db import get_bot_session_mode, get_today_summary, save_custom_product, set_bot_session_mode
 from gemini_client import get_genai_client
@@ -24,7 +24,7 @@ MAIN_KEYBOARD = {
     "keyboard": [
         [{"text": "🍲 Запись приема пищи"}, {"text": "➕ Добавить продукт"}],
         [{"text": "📊 Итоги за сегодня"}, {"text": "💡 Советы ИИ-тренера"}],
-        [{"text": "👨‍💼 Технический таск"}],
+        [{"text": "📋 Список продуктов"}, {"text": "👨‍💼 Технический таск"}],
     ],
     "resize_keyboard": True,
 }
@@ -212,6 +212,9 @@ class handler(BaseHTTPRequestHandler):
         if text in ("👨‍💼 Технический таск", "/task"):
             set_mode(chat_id, MODE_TASK)
             return "👨‍💼 Опишите задачу или желаемую функцию — я передам её Тимлиду."
+        if text in ("📋 Список продуктов", "/products", "продукты", "список продуктов"):
+            set_mode(chat_id, None)
+            return format_products_catalog()
         if text in ("📊 Итоги за сегодня", "/summary"):
             set_mode(chat_id, None)
             return format_summary()
