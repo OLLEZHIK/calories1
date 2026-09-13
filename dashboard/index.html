@@ -178,6 +178,7 @@ a{color:inherit}
 .mealcard li .nm{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .mealcard li .g{font-family:"JetBrains Mono",monospace; font-size:11.5px; color:var(--ink-3); white-space:nowrap}
 .mealcard li .k{font-family:"JetBrains Mono",monospace; font-size:12.5px; font-variant-numeric:tabular-nums; min-width:48px; text-align:right}
+.mealcard li .pr{font-family:"JetBrains Mono",monospace; font-size:12px; font-weight:600; color:var(--good); font-variant-numeric:tabular-nums; margin-left:4px; white-space:nowrap}
 
 .sect{margin-top:32px}
 .sect-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-bottom:8px}
@@ -286,6 +287,7 @@ a{color:inherit}
               <dt>Белки:</dt><dd id="kv-p">0g / 160g</dd>
               <dt>Жиры:</dt><dd id="kv-f">0g / 70g</dd>
               <dt>Углеводы:</dt><dd id="kv-c">0g / 230g</dd>
+              <dt>Расходы:</dt><dd id="kv-cost" style="color:var(--good); font-weight:700">0.00 €</dd>
             </dl>
           </div>
         </div>
@@ -416,7 +418,7 @@ a{color:inherit}
 </div>
 
 <script>
-window.INITIAL_DATA = {"status": "success", "summary": {"date": "2026-09-13", "total_calories": 0.0, "total_protein": 0.0, "total_fat": 0.0, "total_carbs": 0.0, "active_calories": 0, "goals": {"calories": 2200, "protein_g": 160, "fat_g": 70, "carbs_g": 230, "weight_current": null, "weight_goal": null}}, "meals": [], "coach": {"summary": {"date": "2026-09-13", "total_calories": 0.0, "total_protein": 0.0, "total_fat": 0.0, "total_carbs": 0.0, "active_calories": 0, "goals": {"calories": 2200, "protein_g": 160, "fat_g": 70, "carbs_g": 230, "weight_current": null, "weight_goal": null}}, "recommendations": [{"severity": "info", "message": "Вы еще не внесли записи о приемах пищи за сегодня. Начните день с сбалансированного завтрака."}, {"severity": "tip", "message": "Старайтесь распределить дневную норму белка (160 г) равномерно между 3–4 приемами пищи."}]}, "products": [{"id": 21, "product_name": "торт медовик", "category": "sweets", "price_rub": 7.5, "weight_g": 800, "protein_per_100g": 6, "fat_per_100g": 28, "carbs_per_100g": 43, "calories_per_100g": 443, "updated_at": "2026-09-13T12:55:53.724098", "price_per_100g": 0.94, "currency": "€", "efficiency_score": 3.7, "coach_score": 2, "coach_verdict": "Высококалорийный десерт с высоким содержанием насыщенных жиров и быстрых углеводов при низкой доле белка. Сильно повышает суточную калорийность и не способствует фитнес-целям.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 23, "product_name": "яйца куриные", "category": "general", "price_rub": 0.2, "weight_g": 60, "protein_per_100g": 13, "fat_per_100g": 11, "carbs_per_100g": 1, "calories_per_100g": 155, "updated_at": "2026-09-13T13:03:37.475297", "price_per_100g": 0.33, "currency": "€", "efficiency_score": 7.0, "coach_score": 9, "coach_verdict": "Эталонный источник высококачественного белка с идеальным аминокислотным составом и здоровыми жирами.", "efficiency_label": "Средний", "badge_class": "warn"}], "history": {}};
+window.INITIAL_DATA = {"status": "success", "summary": {"date": "2026-09-13", "total_calories": 1572.0, "total_protein": 59.0, "total_fat": 74.0, "total_carbs": 172.0, "active_calories": 0, "total_cost_eur": 3.61, "goals": {"calories": 2200, "protein_g": 160, "fat_g": 70, "carbs_g": 230, "weight_current": null, "weight_goal": null}}, "meals": [{"id": 22, "timestamp": "2026-09-13 13:18", "raw_input": "На обед я ел 50 грамм гречки, 50 грамм риса и одно яйцо. Также запиши в перекусы 150 грамм торта медовик.", "input_type": "voice", "meal_type": "Перекус", "items": [{"id": 49, "fat_g": 41, "carbs_g": 64, "meal_id": 22, "calories": 664, "category": "custom", "protein_g": 10, "quantity_g": 150, "product_name": "торт медовик", "price_per_100g": 0.94, "cost_eur": 1.41}], "total_calories": 664, "total_protein": 10, "total_fat": 41, "total_carbs": 64, "total_cost_eur": 1.41}, {"id": 21, "timestamp": "2026-09-13 13:18", "raw_input": "На обед я ел 50 грамм гречки, 50 грамм риса и одно яйцо. Также запиши в перекусы 150 грамм торта медовик.", "input_type": "voice", "meal_type": "Обед", "items": [{"id": 46, "fat_g": 2, "carbs_g": 36, "meal_id": 21, "calories": 172, "category": "grains", "protein_g": 6, "quantity_g": 50, "product_name": "гречка", "price_per_100g": 0.5, "cost_eur": 0.25}, {"id": 47, "fat_g": 0, "carbs_g": 14, "meal_id": 21, "calories": 65, "category": "grains", "protein_g": 1, "quantity_g": 50, "product_name": "рис", "price_per_100g": 0.17, "cost_eur": 0.09}, {"id": 48, "fat_g": 6, "carbs_g": 1, "meal_id": 21, "calories": 85, "category": "eggs_dairy", "protein_g": 7, "quantity_g": 55, "product_name": "куриное яйцо", "price_per_100g": 0.33, "cost_eur": 0.18}], "total_calories": 322, "total_protein": 14, "total_fat": 8, "total_carbs": 51, "total_cost_eur": 0.52}, {"id": 20, "timestamp": "2026-09-13 13:16", "raw_input": "На завтрак я сегодня ел три жареных яйца, три куриных крыла, половинки крыла, и примерно 50 грамм гречки.", "input_type": "voice", "meal_type": "Завтрак", "items": [{"id": 43, "fat_g": 18, "carbs_g": 2, "meal_id": 20, "calories": 256, "category": "eggs_dairy", "protein_g": 21, "quantity_g": 165, "product_name": "куриное яйцо", "price_per_100g": 0.33, "cost_eur": 0.54}, {"id": 44, "fat_g": 5, "carbs_g": 19, "meal_id": 20, "calories": 158, "category": "general", "protein_g": 8, "quantity_g": 105, "product_name": "куриное крыло", "price_per_100g": 0.85, "cost_eur": 0.89}, {"id": 45, "fat_g": 2, "carbs_g": 36, "meal_id": 20, "calories": 172, "category": "grains", "protein_g": 6, "quantity_g": 50, "product_name": "гречка", "price_per_100g": 0.5, "cost_eur": 0.25}], "total_calories": 586, "total_protein": 35, "total_fat": 25, "total_carbs": 57, "total_cost_eur": 1.68}], "coach": {"summary": {"date": "2026-09-13", "total_calories": 1572.0, "total_protein": 59.0, "total_fat": 74.0, "total_carbs": 172.0, "active_calories": 0, "total_cost_eur": 3.61, "goals": {"calories": 2200, "protein_g": 160, "fat_g": 70, "carbs_g": 230, "weight_current": null, "weight_goal": null}}, "recommendations": [{"severity": "info", "message": "Добавьте в каждый прием пищи свежие овощи и зелень — клетчатка поможет быстрее насытиться без лишней калорийности."}, {"severity": "tip", "message": "Замените майонез и сливочное масло на греческий йогурт, соус на основе нежирного творога или лимонный сок со специями."}, {"severity": "warning", "message": "Вы превысили дневную норму калорий на 1215 ккал, главным образом за счет жиров (162 г при норме 70 г). Ограничьте десерты, майонез и сливочное масло."}]}, "products": [{"id": 29, "product_name": "гречка", "category": "grains", "price_rub": 2.5, "weight_g": 500, "protein_per_100g": 13, "fat_per_100g": 3, "carbs_per_100g": 64, "calories_per_100g": 343, "updated_at": "2026-09-13T13:13:36.505973", "price_per_100g": 0.5, "currency": "€", "efficiency_score": 4.8, "coach_score": 8, "coach_verdict": "Отличный источник сложных углеводов, клетчатки и растительного белка с низким гликемическим индексом. Обеспечивает долгое насыщение и стабильный уровень энергии без скачков сахара.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 32, "product_name": "куриная грудка", "category": "general", "price_rub": 8.5, "weight_g": 1000, "protein_per_100g": 31, "fat_per_100g": 4, "carbs_per_100g": 0, "calories_per_100g": 156, "updated_at": "2026-09-13T13:15:19.038936", "price_per_100g": 0.85, "currency": "€", "efficiency_score": 10.0, "coach_score": 10, "coach_verdict": "Идеальный источник высококачественного белка с минимальным содержанием жира и нулевым количеством углеводов. Лучший выбор для роста мышц и эффективного жиросжигания.", "efficiency_label": "Высокий", "badge_class": "good"}, {"id": 34, "product_name": "масло растительное", "category": "fats_oils", "price_rub": 2, "weight_g": 100, "protein_per_100g": 0, "fat_per_100g": 100, "carbs_per_100g": 0, "calories_per_100g": 899, "updated_at": "2026-09-13T13:21:35.876437", "price_per_100g": 2.0, "currency": "€", "efficiency_score": 3.0, "coach_score": 3, "coach_verdict": "Чистый жир с максимальной калорийностью. При сильном нагревании масло теряет пользу и образует продукты окисления, поэтому контролируйте его количество с помощью распылителя.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 30, "product_name": "помидоры", "category": "vegetables", "price_rub": 1.5, "weight_g": 1000, "protein_per_100g": 1, "fat_per_100g": 0, "carbs_per_100g": 4, "calories_per_100g": 18, "updated_at": "2026-09-13T13:14:08.627153", "price_per_100g": 0.15, "currency": "€", "efficiency_score": 5.4, "coach_score": 9, "coach_verdict": "Низкокалорийный продукт с высоким содержанием клетчатки, витаминов и антиоксидантов. Отличный выбор для добавления объема рациону при контроле веса.", "efficiency_label": "Средний", "badge_class": "warn"}, {"id": 31, "product_name": "рис белый", "category": "grains", "price_rub": 0.7, "weight_g": 400, "protein_per_100g": 7, "fat_per_100g": 1, "carbs_per_100g": 78, "calories_per_100g": 355, "updated_at": "2026-09-13T13:15:04.488979", "price_per_100g": 0.17, "currency": "€", "efficiency_score": 3.9, "coach_score": 6, "coach_verdict": "Хороший источник сложных углеводов для восполнения энергии до и после тренировок. При похудении важно контролировать порцию из-за высокой калорийности и очищенной структуры зерна.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 33, "product_name": "сахар", "category": "sweets", "price_rub": 0.7, "weight_g": 1000, "protein_per_100g": 0, "fat_per_100g": 0, "carbs_per_100g": 100, "calories_per_100g": 387, "updated_at": "2026-09-13T13:20:18.486003", "price_per_100g": 0.07, "currency": "€", "efficiency_score": 3.0, "coach_score": 1, "coach_verdict": "Простые углеводы и пустые калории с высоким гликемическим индексом. Провоцирует скачки инсулина и отложение жира, рекомендуется максимально ограничить.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 35, "product_name": "творог 5%", "category": "general", "price_rub": 1.5, "weight_g": 200, "protein_per_100g": 18, "fat_per_100g": 5, "carbs_per_100g": 3, "calories_per_100g": 130, "updated_at": "2026-09-13T13:36:07.18917", "price_per_100g": 0.75, "currency": "€", "efficiency_score": 9.6, "coach_score": 9, "coach_verdict": "Отличный медленный белок (казеин) и полезные молочные жиры. Прекрасно насыщает и подходит для перекуса или ужина.", "efficiency_label": "Высокий", "badge_class": "good"}, {"id": 21, "product_name": "торт медовик", "category": "sweets", "price_rub": 7.5, "weight_g": 800, "protein_per_100g": 6, "fat_per_100g": 28, "carbs_per_100g": 43, "calories_per_100g": 443, "updated_at": "2026-09-13T12:55:53.724098", "price_per_100g": 0.94, "currency": "€", "efficiency_score": 3.7, "coach_score": 2, "coach_verdict": "Высококалорийный десерт с высоким содержанием насыщенных жиров и быстрых углеводов при низкой доле белка. Сильно повышает суточную калорийность и не способствует фитнес-целям.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 23, "product_name": "яйца куриные", "category": "general", "price_rub": 0.2, "weight_g": 60, "protein_per_100g": 13, "fat_per_100g": 11, "carbs_per_100g": 1, "calories_per_100g": 155, "updated_at": "2026-09-13T13:03:37.475297", "price_per_100g": 0.33, "currency": "€", "efficiency_score": 7.0, "coach_score": 9, "coach_verdict": "Эталонный источник высококачественного белка с идеальным аминокислотным составом и здоровыми жирами.", "efficiency_label": "Средний", "badge_class": "warn"}], "history": {"2026-09-13": 1572}};
 let currentDate = new Date().toISOString().split('T')[0];
 
 async function loadLiveDashboard(dateParam = null) {
@@ -426,6 +428,9 @@ async function loadLiveDashboard(dateParam = null) {
     const res = await fetch(`${apiBase}/api/summary?date=${currentDate}`);
     if (res.ok) {
       const data = await res.json();
+      try {
+        localStorage.setItem('cached_dashboard_' + currentDate, JSON.stringify(data));
+      } catch(e) {}
       updateUI(data);
     }
   } catch (e) {
@@ -528,6 +533,8 @@ function updateUI(data) {
   document.getElementById('kv-p').innerText = `${p}g / ${goals.protein_g}g`;
   document.getElementById('kv-f').innerText = `${f}g / ${goals.fat_g}g`;
   document.getElementById('kv-c').innerText = `${c}g / ${goals.carbs_g}g`;
+  const kvCostEl = document.getElementById('kv-cost');
+  if (kvCostEl) kvCostEl.innerText = `${(summary.total_cost_eur || 0).toFixed(2)} €`;
 
   // Update Macro Rings
   document.getElementById('macro-p-val').innerText = `${p}g`;
@@ -552,7 +559,7 @@ function updateUI(data) {
 
   const updateBlock = (id, arr) => {
     const el = document.getElementById(id);
-    let totCal = 0, totP = 0, totF = 0, totC = 0;
+    let totCal = 0, totP = 0, totF = 0, totC = 0, totCost = 0;
     let listHtml = '';
     
     arr.forEach(m => {
@@ -561,12 +568,15 @@ function updateUI(data) {
       totP += m.total_protein || 0;
       totF += m.total_fat || 0;
       totC += m.total_carbs || 0;
+      totCost += m.total_cost_eur || 0;
       (m.items || []).forEach(i => {
-        listHtml += `<li><span class="nm">${escapeHtml(i.product_name)}</span><span class="g">${Math.round(i.quantity_g)}г</span><span class="k">${Math.round(i.calories)} ккал</span></li>`;
+        const costStr = (i.cost_eur && i.cost_eur > 0) ? `<span class="pr">${Number(i.cost_eur).toFixed(2)} €</span>` : '';
+        listHtml += `<li><span class="nm">${escapeHtml(i.product_name)}</span><span class="g">${Math.round(i.quantity_g)}г</span><span class="k">${Math.round(i.calories)} ккал</span>${costStr}</li>`;
       });
     });
     
-    el.querySelector('.mc-sum').innerHTML = `<span class="mc-k">${Math.round(totCal)}<small>ккал</small></span><span class="mc-macro">Б: ${Math.round(totP)}g | Ж: ${Math.round(totF)}g | У: ${Math.round(totC)}g</span>`;
+    const costBadge = totCost > 0 ? `<span style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:var(--good); margin-left:6px;">${totCost.toFixed(2)} €</span>` : '';
+    el.querySelector('.mc-sum').innerHTML = `<span class="mc-k">${Math.round(totCal)}<small>ккал</small>${costBadge}</span><span class="mc-macro">Б: ${Math.round(totP)}g | Ж: ${Math.round(totF)}g | У: ${Math.round(totC)}g</span>`;
     el.querySelector('ul').innerHTML = listHtml || '<li><span class="nm" style="color:var(--ink-3)">Нет записей</span></li>';
   };
 
@@ -625,8 +635,15 @@ function updateUI(data) {
 
 function escapeHtml(str) { return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
-if (window.INITIAL_DATA) {
-  updateUI(window.INITIAL_DATA);
+try {
+  const cached = localStorage.getItem('cached_dashboard_' + currentDate);
+  if (cached) {
+    updateUI(JSON.parse(cached));
+  } else if (window.INITIAL_DATA) {
+    updateUI(window.INITIAL_DATA);
+  }
+} catch(e) {
+  if (window.INITIAL_DATA) updateUI(window.INITIAL_DATA);
 }
 loadLiveDashboard();
 setInterval(() => loadLiveDashboard(currentDate), 10000);

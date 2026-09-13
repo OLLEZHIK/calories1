@@ -7,14 +7,16 @@ try:
     import config  # noqa: F401 - ensures .env is loaded
 except ImportError:
     pass
-from database.db import get_today_summary, save_product_price, save_coach_recommendation
+from database.db import (
+    get_today_summary, save_product_price, save_coach_recommendation, save_meal,
+    get_product_price_map, find_item_price_per_100g
+)
 from agents.ingestion_agent import ingestion_agent, process_add_product
 from agents.nutrition_agent import nutrition_agent
 from agents.auditor_agent import auditor_agent
 from agents.economy_agent import economy_agent
 from agents.coach_agent import coach_agent
 from agents.dashboard_agent import dashboard_agent
-from database.db import save_meal
 
 def detect_meal_type(raw_text: str) -> str:
     """
@@ -149,12 +151,14 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
 
         if llm_intent == "summary":
             today = get_today_summary()
+            cost_str = f"\n💰 **Потрачено на еду**: {today.get('total_cost_eur', 0.0):.2f} €" if today.get('total_cost_eur', 0) > 0 else ""
             return (
                 f"📊 **Итоги за сегодня ({today['date']})**:\n\n"
                 f"🔥 **Калории**: {int(round(today['total_calories']))} / {today['goals']['calories']} ккал\n"
                 f"🥩 **Белки**: {int(round(today['total_protein']))}g / {today['goals']['protein_g']}g\n"
                 f"🥑 **Жиры**: {int(round(today['total_fat']))}g / {today['goals']['fat_g']}g\n"
                 f"🍚 **Углеводы**: {int(round(today['total_carbs']))}g / {today['goals']['carbs_g']}g"
+                f"{cost_str}"
                 f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
             )
 
@@ -188,12 +192,14 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
 
             if any(cmd in text_lower for cmd in ["/summary", "итоги", "сколько я съел", "калории за день", "норма"]):
                 today = get_today_summary()
+                cost_str = f"\n💰 **Потрачено на еду**: {today.get('total_cost_eur', 0.0):.2f} €" if today.get('total_cost_eur', 0) > 0 else ""
                 return (
                     f"📊 **Итоги за сегодня ({today['date']})**:\n\n"
                     f"🔥 **Калории**: {int(round(today['total_calories']))} / {today['goals']['calories']} ккал\n"
                     f"🥩 **Белки**: {int(round(today['total_protein']))}g / {today['goals']['protein_g']}g\n"
                     f"🥑 **Жиры**: {int(round(today['total_fat']))}g / {today['goals']['fat_g']}g\n"
                     f"🍚 **Углеводы**: {int(round(today['total_carbs']))}g / {today['goals']['carbs_g']}g"
+                    f"{cost_str}"
                     f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
                 )
 
@@ -258,6 +264,8 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
             total_f = int(round(sum(i["fat_g"] for i in audited_items)))
             total_c = int(round(sum(i["carbs_g"] for i in audited_items)))
 
+            price_map = get_product_price_map()
+            meal_cost = 0.0
             item_lines = []
             for item in audited_items:
                 p_val = int(round(item['protein_g']))
@@ -265,12 +273,19 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
                 c_val = int(round(item['carbs_g']))
                 cal_val = int(round(item['calories']))
                 g_val = int(round(item['quantity_g']))
-                item_lines.append(f"• {item['product_name']} ({g_val}g): {cal_val} ккал | Б:{p_val}g | Ж:{f_val}g | У:{c_val}g")
+                pr100 = find_item_price_per_100g(item['product_name'], price_map)
+                cost_part = ""
+                if pr100 is not None and g_val > 0:
+                    it_cost = (g_val / 100.0) * pr100
+                    meal_cost += it_cost
+                    cost_part = f" | 💰 {it_cost:.2f} €"
+                item_lines.append(f"• {item['product_name']} ({g_val}g): {cal_val} ккал | Б:{p_val}g | Ж:{f_val}g | У:{c_val}g{cost_part}")
 
+            cost_line = f" | 💰 {meal_cost:.2f} €" if meal_cost > 0 else ""
             saved_meal_responses.append(
                 f"{m_icon} **{m_type.upper()} записан!** (Запись #{meal_id})\n"
                 + "\n".join(item_lines) + "\n"
-                + f"🔥 **Сумма**: {total_cal} ккал | Б: {total_p}g | Ж: {total_f}g | У: {total_c}g"
+                + f"🔥 **Сумма**: {total_cal} ккал | Б: {total_p}g | Ж: {total_f}g | У: {total_c}g{cost_line}"
             )
 
         if not saved_meal_responses:
@@ -280,11 +295,12 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
         coach_agent.analyze()
         dashboard_agent.render()
         today = get_today_summary()
+        day_cost_str = f" | 💰 {today.get('total_cost_eur', 0):.2f} €" if today.get('total_cost_eur', 0) > 0 else ""
 
         response = (
             "\n\n".join(saved_meal_responses) + "\n\n"
             + f"📊 **Всего за день**: {int(round(today['total_calories']))}/{today['goals']['calories']} ккал "
-            + f"(Б: {int(round(today['total_protein']))}g / Ж: {int(round(today['total_fat']))}g / У: {int(round(today['total_carbs']))}g)"
+            + f"(Б: {int(round(today['total_protein']))}g / Ж: {int(round(today['total_fat']))}g / У: {int(round(today['total_carbs']))}g){day_cost_str}"
             + "\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
         )
 

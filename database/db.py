@@ -347,7 +347,8 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
                 tot_f = 0.0
                 tot_c = 0.0
                 active_cal = 0.0
-
+                tot_cost = 0.0
+                price_map = get_product_price_map()
                 for m in sp_meals:
                     is_active = m.get("notes") == "Активность"
                     for mi in m.get("meal_items", []):
@@ -358,6 +359,12 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
                         tot_c += float(mi.get("carbs_g", 0))
                         if is_active:
                             active_cal += abs(cal)
+                        else:
+                            q = float(mi.get("quantity_g", 0))
+                            pn = mi.get("product_name", "")
+                            pr100 = find_item_price_per_100g(pn, price_map)
+                            if pr100 is not None and q > 0:
+                                tot_cost += (q / 100.0) * pr100
 
                 # Pull real user goals (incl. weight tracking) from Supabase instead of
                 # always returning the hardcoded defaults.
@@ -386,6 +393,7 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
                     "total_fat": round(tot_f, 1),
                     "total_carbs": round(tot_c, 1),
                     "active_calories": round(active_cal),
+                    "total_cost_eur": round(tot_cost, 2),
                     "goals": goals
                 }
         except Exception as e:
@@ -424,8 +432,21 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
         """, (target_date,)).fetchone()
         active_calories = round(active_row["active_cal"]) if active_row else 0
 
-        # Adjust total_calories if it includes negative active calories (we already added them as negative to the DB to subtract from daily balance)
-        # But we still want to expose active_calories as a separate metric.
+        # Calculate total cost for local sqlite meals
+        tot_cost = 0.0
+        price_map = get_product_price_map()
+        items_today = cursor.execute("""
+            SELECT mi.product_name, mi.quantity_g 
+            FROM meals m
+            JOIN meal_items mi ON m.id = mi.meal_id
+            WHERE DATE(m.timestamp) = DATE(?) AND m.notes != 'Активность'
+        """, (target_date,)).fetchall()
+        for it in items_today:
+            q = float(it["quantity_g"] or 0)
+            pn = it["product_name"] or ""
+            pr100 = find_item_price_per_100g(pn, price_map)
+            if pr100 is not None and q > 0:
+                tot_cost += (q / 100.0) * pr100
 
         return {
             "date": target_date,
@@ -434,10 +455,12 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
             "total_fat": round(row["total_fat"], 1),
             "total_carbs": round(row["total_carbs"], 1),
             "active_calories": active_calories,
+            "total_cost_eur": round(tot_cost, 2),
             "goals": goals
         }
 
 def get_recent_meals(limit: int = 10, target_date: str = None) -> List[Dict[str, Any]]:
+    price_map = get_product_price_map()
     if SUPABASE_URL and SUPABASE_KEY:
         try:
             url = f"meals?select=*,meal_items(*)&order=timestamp.desc&limit={limit}"
@@ -448,17 +471,31 @@ def get_recent_meals(limit: int = 10, target_date: str = None) -> List[Dict[str,
                 result = []
                 for m in sp_meals:
                     items = m.get("meal_items", [])
+                    enriched_items = []
+                    meal_cost = 0.0
+                    for i in items:
+                        item_dict = dict(i)
+                        q = float(item_dict.get("quantity_g", 0))
+                        p_name = item_dict.get("product_name", "")
+                        pr100 = find_item_price_per_100g(p_name, price_map)
+                        cost = round((q / 100.0) * pr100, 2) if (pr100 is not None and q > 0) else 0.0
+                        item_dict["price_per_100g"] = pr100
+                        item_dict["cost_eur"] = cost
+                        meal_cost += cost
+                        enriched_items.append(item_dict)
+
                     result.append({
                         "id": m.get("id"),
                         "timestamp": (m.get("timestamp") or m.get("created_at") or "")[:16].replace("T", " "),
                         "raw_input": m.get("raw_input"),
                         "input_type": m.get("input_type"),
                         "meal_type": m.get("notes") or "Прием пищи",
-                        "items": items,
+                        "items": enriched_items,
                         "total_calories": int(round(sum(float(i.get("calories", 0)) for i in items))),
                         "total_protein": int(round(sum(float(i.get("protein_g", 0)) for i in items))),
                         "total_fat": int(round(sum(float(i.get("fat_g", 0)) for i in items))),
                         "total_carbs": int(round(sum(float(i.get("carbs_g", 0)) for i in items))),
+                        "total_cost_eur": round(meal_cost, 2),
                     })
                 return result
         except Exception as e:
@@ -481,6 +518,17 @@ def get_recent_meals(limit: int = 10, target_date: str = None) -> List[Dict[str,
                 "SELECT * FROM meal_items WHERE meal_id = ?", (m["id"],)
             ).fetchall()
             items = [dict(item) for item in items_rows]
+            enriched_items = []
+            meal_cost = 0.0
+            for i in items:
+                q = float(i.get("quantity_g", 0))
+                p_name = i.get("product_name", "")
+                pr100 = find_item_price_per_100g(p_name, price_map)
+                cost = round((q / 100.0) * pr100, 2) if (pr100 is not None and q > 0) else 0.0
+                i["price_per_100g"] = pr100
+                i["cost_eur"] = cost
+                meal_cost += cost
+                enriched_items.append(i)
 
             result.append({
                 "id": m["id"],
@@ -488,11 +536,12 @@ def get_recent_meals(limit: int = 10, target_date: str = None) -> List[Dict[str,
                 "raw_input": m["raw_input"],
                 "input_type": m["input_type"],
                 "meal_type": m["notes"] if m["notes"] else "Прием пищи",
-                "items": items,
+                "items": enriched_items,
                 "total_calories": int(round(sum(i["calories"] for i in items))),
                 "total_protein": int(round(sum(i["protein_g"] for i in items))),
                 "total_fat": int(round(sum(i["fat_g"] for i in items))),
                 "total_carbs": int(round(sum(i["carbs_g"] for i in items))),
+                "total_cost_eur": round(meal_cost, 2),
             })
         return result
 
@@ -793,6 +842,47 @@ def get_product_prices() -> List[Dict[str, Any]]:
             d["badge_class"] = badge_class
             result.append(d)
         return result
+
+def get_product_price_map() -> Dict[str, float]:
+    """Returns mapping of product name to price per 100g in EUR (€)."""
+    prices = get_product_prices()
+    pm: Dict[str, float] = {}
+    for p in prices:
+        name = (p.get("product_name") or "").strip().lower()
+        p100 = float(p.get("price_per_100g") or 0.0)
+        if name and p100 > 0:
+            pm[name] = p100
+    return pm
+
+def find_item_price_per_100g(item_name: str, price_map: Optional[Dict[str, float]] = None) -> Optional[float]:
+    """Finds price per 100g for an ingredient using exact, canonical duplicate, or token matching."""
+    if price_map is None:
+        price_map = get_product_price_map()
+    n = (item_name or "").strip().lower()
+    if not n or not price_map:
+        return None
+
+    if n in price_map:
+        return price_map[n]
+
+    for p_name, pr in price_map.items():
+        if are_product_duplicates(n, p_name):
+            return pr
+
+    toks = set(stem_product_word(t) for t in re.sub(r'[^\w\s]', '', n).split() if len(t) > 1)
+    for p_name, pr in price_map.items():
+        p_toks = set(stem_product_word(t) for t in re.sub(r'[^\w\s]', '', p_name).split() if len(t) > 1)
+        if toks and p_toks and toks.intersection(p_toks):
+            return pr
+
+    return None
+
+def calculate_item_cost(product_name: str, quantity_g: float, price_map: Optional[Dict[str, float]] = None) -> float:
+    """Calculates EUR cost for an ingredient amount."""
+    pr100 = find_item_price_per_100g(product_name, price_map)
+    if pr100 is not None and quantity_g > 0:
+        return round((quantity_g / 100.0) * pr100, 2)
+    return 0.0
 
 def save_coach_recommendation(topic: str, recommendation: str, severity: str = "info"):
     with get_connection() as conn:

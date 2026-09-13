@@ -125,12 +125,14 @@ def is_verified_telegram_request(headers: Any) -> bool:
 def format_summary() -> str:
     today = get_today_summary()
     goals = today["goals"]
+    cost_str = f"💰 **Потрачено на еду за день**: {today.get('total_cost_eur', 0):.2f} €\n" if today.get('total_cost_eur', 0) > 0 else ""
     return (
         f"📊 **Итоги за сегодня ({today['date']})**:\n\n"
         f"🔥 **Калории**: {int(round(today['total_calories']))} / {goals['calories']} ккал\n"
         f"🥩 **Белки**: {int(round(today['total_protein']))}g / {goals['protein_g']}g\n"
         f"🥑 **Жиры**: {int(round(today['total_fat']))}g / {goals['fat_g']}g\n"
-        f"🍚 **Углеводы**: {int(round(today['total_carbs']))}g / {goals['carbs_g']}g\n\n"
+        f"🍚 **Углеводы**: {int(round(today['total_carbs']))}g / {goals['carbs_g']}g\n"
+        f"{cost_str}\n"
         "🌐 [Открыть дашборд](https://fatcaunter.vercel.app)"
     )
 

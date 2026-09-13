@@ -30,6 +30,42 @@ def _call_gemini(prompt: str, system: str = "", model: str = "gemini-3.6-flash")
         return ""
 
 
+def apply_fried_egg_oil_rule(items: List[Dict[str, Any]], raw_text: str = "") -> List[Dict[str, Any]]:
+    """
+    Automatic culinary rule: For every fried egg, automatically count 2g of butter/oil.
+    E.g., 3 fried eggs = 3 eggs (165g) + 6g butter.
+    """
+    has_oil = any("масло" in (i.get("product_name") or "").lower() for i in items)
+    if has_oil:
+        return items
+
+    raw_lower = (raw_text or "").lower()
+    fried_eggs_count = 0
+
+    for item in items:
+        p_name = (item.get("product_name") or "").lower()
+        is_egg = "яйц" in p_name
+        is_fried = any(w in p_name for w in ["жарен", "яичниц", "глазунь", "омлет"]) or (is_egg and any(w in raw_lower for w in ["жарен", "яичниц", "глазунь", "пожар"]))
+        if is_egg and is_fried:
+            qty = float(item.get("quantity_g") or 55.0)
+            count = max(1, int(round(qty / 55.0)))
+            fried_eggs_count += count
+
+    if fried_eggs_count > 0:
+        oil_g = round(fried_eggs_count * 2.0, 1)
+        items.append({
+            "product_name": "масло сливочное",
+            "quantity_g": oil_g,
+            "category": "fats_oils",
+            "explicit_kcal": None,
+            "explicit_protein": None,
+            "explicit_fat": None,
+            "explicit_carbs": None
+        })
+
+    return items
+
+
 class IngestionAgent:
     """
     Agent 1: Ingestion & LLM Structuring Agent
@@ -112,6 +148,7 @@ RULES:
    - "explicit_kcal": -500 (make sure it's negative)
    - "explicit_protein": 0, "explicit_fat": 0, "explicit_carbs": 0
    And set the "meal_type" of this block to "Активность".
+5. FRIED EGGS RULE: If the user mentions fried eggs ("жареное яйцо", "жареные яйца", "яичница", "глазунья", "пожарил N яиц"), extract the eggs (approx 55g per egg) AND automatically add a companion food item: "масло сливочное" with quantity_g = 2g per egg (e.g. 3 fried eggs = 3 eggs (165g) + 6g масло сливочное), unless user explicitly specified another oil amount.
 
 Return ONLY valid JSON, no markdown, no explanation:
 {"meals": [{"meal_type": "Завтрак", "items": [{"product_name": "куриное яйцо", "quantity_g": 165, "explicit_kcal": null, "explicit_protein": null, "explicit_fat": null, "explicit_carbs": null}]}]}"""
@@ -146,6 +183,8 @@ Return ONLY valid JSON, no markdown, no explanation:
                     parsed = json.loads(json_match.group(1))
                     meals = parsed.get("meals", [])
                     if meals:
+                        for m in meals:
+                            m["items"] = apply_fried_egg_oil_rule(m.get("items", []), raw_input)
                         return meals
             except Exception as e:
                 print(f"Gemini ingestion error: {e}")
@@ -180,9 +219,15 @@ Return ONLY valid JSON, no markdown, no explanation:
                     json_match = re.search(r'(\{[\s\S]*\})', content)
                     if json_match:
                         parsed = json.loads(json_match.group(1))
-                        return parsed.get("meals", [])
+                        meals = parsed.get("meals", [])
+                        for m in meals:
+                            m["items"] = apply_fried_egg_oil_rule(m.get("items", []), raw_input)
+                        return meals
                     parsed = json.loads(content)
-                    return parsed.get("meals", [])
+                    meals = parsed.get("meals", [])
+                    for m in meals:
+                        m["items"] = apply_fried_egg_oil_rule(m.get("items", []), raw_input)
+                    return meals
             except Exception as e:
                 print(f"Groq ingestion fallback error: {e}")
 
@@ -267,7 +312,7 @@ Return ONLY valid JSON, no markdown, no explanation:
                 "raw_part": part
             })
 
-        return items
+        return apply_fried_egg_oil_rule(items, raw_input)
 
 
 ingestion_agent = IngestionAgent()

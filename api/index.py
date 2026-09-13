@@ -1,7 +1,9 @@
 from http.server import BaseHTTPRequestHandler
 import json
-from database.db import get_today_summary, get_recent_meals, get_product_prices, get_meals_for_days
-from agents.coach_agent import coach_agent
+from database.db import (
+    get_today_summary, get_recent_meals, get_product_prices, get_meals_for_days,
+    get_recent_recommendations
+)
 import urllib.parse
 
 class handler(BaseHTTPRequestHandler):
@@ -13,8 +15,21 @@ class handler(BaseHTTPRequestHandler):
 
             summary = get_today_summary(target_date)
             meals = get_recent_meals(limit=10, target_date=target_date)
-            coach = coach_agent.analyze()
             products = get_product_prices()
+
+            # Fast coach recommendations from DB cache without waiting for Gemini LLM
+            recent_recs = get_recent_recommendations(limit=6)
+            coach_tips = [
+                {"severity": r.get("severity", "tip"), "message": r.get("recommendation", "")}
+                for r in recent_recs
+                if not (r.get("topic", "").startswith("Продукт:") or r.get("topic", "").startswith("Запрос фичи"))
+            ]
+            if not coach_tips:
+                coach_tips = [
+                    {"severity": "info", "message": "Соблюдайте баланс белков, жиров и углеводов в течение дня."},
+                    {"severity": "tip", "message": "Пейте достаточное количество чистой воды между приёмами пищи."}
+                ]
+            coach = {"summary": summary, "recommendations": coach_tips[:3]}
             
             # Generate dynamic live telemetry logs for the 6 agents
             telemetry = []
