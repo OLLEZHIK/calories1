@@ -25,13 +25,13 @@ def detect_meal_type(raw_text: str) -> str:
     """
     text_lower = raw_text.lower()
 
-    if any(k in text_lower for k in ["завтрак", "на завтрак", "утром"]):
+    if any(k in text_lower for k in ["завтрак", "на завтрак", "к завтраку", "позавтракал", "утром"]):
         return "Завтрак"
-    if any(k in text_lower for k in ["обед", "на обед", "днем"]):
+    if any(k in text_lower for k in ["обед", "на обед", "к обеду", "в обед", "пообедал", "днем"]):
         return "Обед"
-    if any(k in text_lower for k in ["ужин", "на ужин", "вечером"]):
+    if any(k in text_lower for k in ["ужин", "на ужин", "к ужину", "поужинал", "вечером"]):
         return "Ужин"
-    if any(k in text_lower for k in ["перекус", "перекусил", "полдник", "снек", "перекусить"]):
+    if any(k in text_lower for k in ["перекус", "перекусил", "полдник", "снек", "перекусить", "к перекусу"]):
         return "Перекус"
 
     # Time-based fallback

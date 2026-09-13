@@ -134,7 +134,12 @@ Your task is to return a valid JSON object with key "meals": a list of meal obje
 
 RULES:
 1. Ignore conversational filler words, self-corrections, questions ("Смотри", "ой не 9 а 19", "и что еще?", "белки там").
-2. If the user mentions multiple meals in one voice note (e.g. "на завтрак...\" AND "сейчас на обед..."), split them into separate meal objects with "meal_type": ("Завтрак", "Обед", "Ужин", "Перекус").
+2. Meal category ("meal_type": "Завтрак", "Обед", "Ужин", "Перекус"):
+   - Match phrases like "к обеду", "на обед", "в обед", "пообедал" -> "Обед".
+   - Match "к завтраку", "на завтрак", "утром" -> "Завтрак".
+   - Match "к ужину", "на ужин", "вечером", "поужинал" -> "Ужин".
+   - Match "к перекусу", "на перекус", "полдник", "десерт" -> "Перекус".
+   If multiple meals are mentioned in one voice note (e.g. "на завтрак...\" AND "сейчас к обеду..."), split them into separate meal objects.
 3. For each food item, extract:
    - "product_name": normalized Russian name (e.g. "куриное яйцо", "макароны", "бекон", "майонез", "сосиски", "моцарелла light", "помидор", "масло оливковое")
    - "quantity_g": total net weight in grams (number, e.g. 3 eggs = 165g, 1 mozzarella = 125g, tomato = 50g)
@@ -301,6 +306,7 @@ Return ONLY valid JSON, no markdown, no explanation:
                     quantity_g = val
 
                 product_name = re.sub(r'(\d+[\.,]?\d*)\s*(г|гр|грамм|г.|g|кг|kg|шт|штук|яиц|яйца|стакан|ложка|ст.л|ч.л)?', '', part, flags=re.IGNORECASE).strip()
+                product_name = re.sub(r'^(?:добавь|запиши|съел|съела|на\s+обед|к\s+обеду|в\s+обед|на\s+завтрак|к\s+завтраку|на\s+ужин|к\s+ужину|на\s+перекус|к\s+перекусу)\s+', '', product_name, flags=re.IGNORECASE).strip()
 
             if not product_name:
                 product_name = part
