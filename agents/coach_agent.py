@@ -1,6 +1,10 @@
 from typing import List, Dict, Any
 import os
 import json
+try:
+    import config  # noqa: F401 - ensures .env is loaded
+except ImportError:
+    pass
 from database.db import get_today_summary, get_recent_meals, save_coach_recommendation
 
 class CoachAgent:
@@ -41,7 +45,7 @@ Recent meals:
                 resp = client.models.generate_content(
                     model=model,
                     contents=prompt,
-                    config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=300)
+                    config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=1500)
                 )
                 
                 content = resp.text or ""

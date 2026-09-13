@@ -4,6 +4,11 @@ import json
 import urllib.request
 from typing import List, Dict, Any
 
+try:
+    import config  # noqa: F401 - ensures .env is loaded into os.environ
+except ImportError:
+    pass
+
 # ── Shared Gemini helper ───────────────────────────────────────────────────────
 def _call_gemini(prompt: str, system: str = "", model: str = "gemini-3.6-flash") -> str:
     """Call Gemini API via google-genai SDK. Returns response text or '' on error."""
@@ -132,7 +137,7 @@ Return ONLY valid JSON, no markdown, no explanation:
                     ],
                     config=types.GenerateContentConfig(
                         temperature=0.1,
-                        max_output_tokens=1000,
+                        max_output_tokens=2048,
                     )
                 )
                 content = resp.text or ""
@@ -266,3 +271,173 @@ Return ONLY valid JSON, no markdown, no explanation:
 
 
 ingestion_agent = IngestionAgent()
+
+
+def process_add_product(raw_text: str = "", image_bytes: bytes = None) -> str:
+    """
+    Multimodal AI product processing (via Gemini 3.6 Flash).
+    Analyzes packaging photos, price tags, text, or voice transcripts to extract
+    product name, weight, price, and exact or estimated macros per 100g.
+    Saves to both custom_products and product_prices tables in SQLite and Supabase.
+    """
+    from gemini_client import get_genai_client
+    from database.db import save_custom_product, save_product_price
+
+    client = get_genai_client()
+    parsed_data = None
+
+    if client:
+        try:
+            from google.genai import types
+            model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+
+            sys_prompt = """You are an expert nutrition, culinary, and product cataloging AI.
+The user is adding a food item to their personal database using a description, speech transcript, photo of packaging/nutrition table, photo of price tag, or photo of the food.
+
+Your task is to analyze the input and extract or realistically estimate the product's nutritional values and pricing.
+
+RULES:
+1. "product_name": Clean, concise Russian name (e.g. "Торт Медовик", "Творог 5%", "Овсяное печенье").
+   STRIP ALL conversational filler like "запиши в список", "добавь", "купил", "цена за", "стоит", etc.
+2. "weight_g": Total net weight of the product or package in grams (e.g., 800g -> 800, 1kg -> 1000, 500г -> 500). If not mentioned or visible, default to 100.
+3. "price": Numeric price if mentioned or shown on price tag, or null.
+4. "currency": "€" if euro/евро, "$" if dollar, or "руб" (default to "руб" if price is given without currency or in rubles).
+5. "calories_100g", "protein_100g", "fat_100g", "carbs_100g":
+   - If visible on nutrition table in photo or stated by user in text, extract EXACT numbers per 100g.
+   - If NOT stated, use your expert culinary knowledge to provide ACCURATE, REALISTIC nutritional values per 100g for this specific product (e.g., for "Торт Медовик": calories ~390, protein ~5.5, fat ~19, carbs ~54).
+6. "category": Choose best fit from: "meat", "fish", "eggs_dairy", "fats_oils", "vegetables", "fruit", "grains", "bakery", "sweets", "general".
+7. "is_estimated": true if macros were estimated by AI; false if read directly from package table/user input.
+
+Return ONLY a valid JSON object in this exact format:
+{
+  "product_name": "Торт Медовик",
+  "category": "sweets",
+  "weight_g": 800.0,
+  "price": 7.5,
+  "currency": "€",
+  "calories_100g": 390.0,
+  "protein_100g": 5.5,
+  "fat_100g": 19.0,
+  "carbs_100g": 54.0,
+  "is_estimated": true
+}"""
+
+            user_parts = []
+            if image_bytes:
+                user_parts.append(types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"))
+            user_parts.append(types.Part.from_text(text=raw_text or "Извлеки информацию о продукте, весе, цене и КБЖУ."))
+
+            resp = client.models.generate_content(
+                model=model,
+                contents=[
+                    types.Content(role="user", parts=[types.Part.from_text(text=sys_prompt)]),
+                    types.Content(role="model", parts=[types.Part.from_text(text="Understood. I will return only valid JSON.")]),
+                    types.Content(role="user", parts=user_parts),
+                ],
+                config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=2048)
+            )
+            raw_output = (resp.text or "").strip()
+            if "```json" in raw_output:
+                raw_output = raw_output.split("```json")[1].split("```")[0].strip()
+            elif "```" in raw_output:
+                raw_output = raw_output.split("```")[1].split("```")[0].strip()
+
+            json_match = re.search(r'(\{[\s\S]*\})', raw_output)
+            if json_match:
+                parsed_data = json.loads(json_match.group(1))
+        except Exception as e:
+            print(f"Gemini process_add_product error: {e}")
+
+    # Fallback if Gemini failed or is not configured
+    if not parsed_data:
+        p_info = ingestion_agent.parse_price_entry(raw_text or "")
+        p_name = p_info["product_name"] if p_info else (raw_text or "Новый продукт")
+        w_g = p_info["weight_g"] if p_info else 100.0
+        price_val = p_info["price"] if p_info else None
+        curr = p_info["currency"] if p_info else "руб"
+
+        from agents.nutrition_agent import nutrition_agent
+        calc = nutrition_agent.calculate([{"product_name": p_name, "quantity_g": 100}])
+        m = calc[0] if calc else {"calories": 150, "protein_g": 5, "fat_g": 5, "carbs_g": 20, "category": "general"}
+        parsed_data = {
+            "product_name": p_name,
+            "category": m.get("category", "general"),
+            "weight_g": w_g,
+            "price": price_val,
+            "currency": curr,
+            "calories_100g": m.get("calories", 150),
+            "protein_100g": m.get("protein_g", 5),
+            "fat_100g": m.get("fat_g", 5),
+            "carbs_100g": m.get("carbs_g", 20),
+            "is_estimated": True
+        }
+
+    product_name = (parsed_data.get("product_name") or "Продукт").strip()
+    category = parsed_data.get("category", "general")
+    weight_g = float(parsed_data.get("weight_g") or 100.0)
+    if weight_g <= 0:
+        weight_g = 100.0
+    price = float(parsed_data["price"]) if parsed_data.get("price") is not None else None
+    currency = parsed_data.get("currency", "руб")
+    cal_100 = float(parsed_data.get("calories_100g") or 0.0)
+    p_100 = float(parsed_data.get("protein_100g") or 0.0)
+    f_100 = float(parsed_data.get("fat_100g") or 0.0)
+    c_100 = float(parsed_data.get("carbs_100g") or 0.0)
+    is_estimated = bool(parsed_data.get("is_estimated", False))
+
+    # If calories/macros were not estimated or null, fill them in via nutrition agent
+    if cal_100 <= 0 and p_100 <= 0 and f_100 <= 0 and c_100 <= 0:
+        from agents.nutrition_agent import nutrition_agent
+        calc = nutrition_agent.calculate([{"product_name": product_name, "quantity_g": 100}])
+        if calc:
+            m = calc[0]
+            cal_100 = float(m.get("calories", 0))
+            p_100 = float(m.get("protein_g", 0))
+            f_100 = float(m.get("fat_g", 0))
+            c_100 = float(m.get("carbs_g", 0))
+            is_estimated = True
+
+    # Save to custom_products
+    save_custom_product(product_name, cal_100, p_100, f_100, c_100)
+
+    # Save to product_prices if price present
+    price_per_100g = None
+    if price is not None:
+        price_per_100g = round((price / weight_g) * 100, 2)
+        save_product_price(product_name, price, weight_g, category, p_100, f_100, c_100, cal_100)
+
+    # Calculate totals for entire package/weight
+    ratio = weight_g / 100.0
+    total_cal = int(round(cal_100 * ratio))
+    total_p = round(p_100 * ratio, 1)
+    total_f = round(f_100 * ratio, 1)
+    total_c = round(c_100 * ratio, 1)
+
+    macro_tag = " *(оценка ИИ)*" if is_estimated else ""
+
+    lines = [
+        "✅ **Продукт успешно добавлен в базу!**\n",
+        f"📦 **Название**: `{product_name}`",
+        f"⚖️ **Вес упаковки**: {int(round(weight_g))} г",
+    ]
+    if price is not None:
+        lines.append(f"💵 **Стоимость**: {price} {currency} ({price_per_100g} {currency} за 100г)")
+
+    lines.extend([
+        f"\n📊 **КБЖУ на 100г**{macro_tag}:",
+        f"🔥 Калории: {int(round(cal_100))} ккал",
+        f"🥩 Белки: {round(p_100, 1)} г",
+        f"🥑 Жиры: {round(f_100, 1)} г",
+        f"🍚 Углеводы: {round(c_100, 1)} г",
+    ])
+
+    if abs(weight_g - 100.0) > 1.0:
+        lines.extend([
+            f"\n🍱 **На всю упаковку ({int(round(weight_g))}г)**:",
+            f"🔥 {total_cal} ккал | Б: {total_p}г | Ж: {total_f}г | У: {total_c}г",
+        ])
+
+    lines.append("\n💾 Продукт сохранён в личную базу и список цен. Теперь вы можете записывать его в рацион (например: *«съел 200г торта медовик»*).")
+    lines.append("\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)")
+
+    return "\n".join(lines)

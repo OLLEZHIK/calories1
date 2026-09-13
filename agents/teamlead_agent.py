@@ -2,8 +2,13 @@ import re
 import json
 import os
 from typing import Dict, Any, List
+
+try:
+    import config  # noqa: F401 - ensures .env is loaded
+except ImportError:
+    pass
 from database.db import get_today_summary, save_product_price, save_coach_recommendation
-from agents.ingestion_agent import ingestion_agent
+from agents.ingestion_agent import ingestion_agent, process_add_product
 from agents.nutrition_agent import nutrition_agent
 from agents.auditor_agent import auditor_agent
 from agents.economy_agent import economy_agent
@@ -81,7 +86,7 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
             resp = client.models.generate_content(
                 model=model,
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=10)
+                config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=1000)
             )
             tokens = (resp.text or "").strip().lower().split()
             intent = tokens[0] if tokens else None
@@ -137,44 +142,17 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
             )
 
         if llm_intent == "price":
-            price_info = ingestion_agent.parse_price_entry(raw_text)
-            if price_info:
-                save_product_price(
-                    product_name=price_info["product_name"],
-                    price_rub=price_info["price"],
-                    weight_g=price_info["weight_g"]
-                )
-                econ_stats = economy_agent.analyze_economy()
-                return (
-                    f"💰 **Цена продукта записана!**\n\n"
-                    f"🛒 **Продукт**: {price_info['product_name']}\n"
-                    f"💵 **Стоимость**: {price_info['price']} {price_info['currency']} за {int(round(price_info['weight_g']))}g\n"
-                    f"📊 **Цена за 100g**: {round(price_info['price_per_100g'], 2)} {price_info['currency']}\n\n"
-                    f"📈 **Экономика рациона**: Продуктов отслеживается: {econ_stats.get('total_tracked_products', 0)}."
-                    f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
-                )
+            return process_add_product(raw_text=raw_text, image_bytes=image_bytes)
 
         # If llm_intent == "food" OR no Gemini key — fall through to keyword + food pipeline below
 
         # ── Keyword fallback (no GEMINI_API_KEY) ────────────────────────────
         # 1. Check if user is logging a product price
         if llm_intent is None:
-            price_info = ingestion_agent.parse_price_entry(raw_text)
-            if price_info:
-                save_product_price(
-                    product_name=price_info["product_name"],
-                    price_rub=price_info["price"],
-                    weight_g=price_info["weight_g"]
-                )
-                econ_stats = economy_agent.analyze_economy()
-                return (
-                    f"💰 **Цена продукта записана!**\n\n"
-                    f"🛒 **Продукт**: {price_info['product_name']}\n"
-                    f"💵 **Стоимость**: {price_info['price']} {price_info['currency']} за {int(round(price_info['weight_g']))}g\n"
-                    f"📊 **Цена за 100g**: {round(price_info['price_per_100g'], 2)} {price_info['currency']}\n\n"
-                    f"📈 **Экономика рациона**: Продуктов отслеживается: {econ_stats.get('total_tracked_products', 0)}."
-                    f"\n\n🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
-                )
+            if any(w in text_lower for w in ["стоят", "стоит", "цена", "стоимость", "евро", "euro", "€", "$", "руб", "рублей"]):
+                price_res = process_add_product(raw_text=raw_text, image_bytes=image_bytes)
+                if price_res:
+                    return price_res
 
             if any(cmd in text_lower for cmd in ["/summary", "итоги", "сколько я съел", "калории за день", "норма"]):
                 today = get_today_summary()

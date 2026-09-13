@@ -10,6 +10,7 @@ import urllib.request
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agents.audio_agent import audio_agent
+from agents.ingestion_agent import process_add_product
 from bot.telegram_bot import process_task_input, process_user_meal_input
 from database.db import get_bot_session_mode, get_today_summary, save_custom_product, set_bot_session_mode
 from gemini_client import get_genai_client
@@ -158,7 +159,12 @@ class handler(BaseHTTPRequestHandler):
                 result = audio_agent.transcribe(voice_bytes) if voice_bytes else {"text": ""}
                 transcription = result.get("text", "")
                 if transcription:
-                    routed = process_task_input(transcription) if mode == MODE_TASK else process_user_meal_input(transcription, input_type="voice")
+                    if mode == MODE_ADD_PRODUCT:
+                        routed = process_add_product(raw_text=transcription)
+                    elif mode == MODE_TASK:
+                        routed = process_task_input(transcription)
+                    else:
+                        routed = process_user_meal_input(transcription, input_type="voice")
                     reply = f"🎤 **Распознано**:\n*\"{transcription}\"*\n\n{routed}"
                 else:
                     reply = "⚠️ Не удалось распознать голосовое сообщение. Отправьте еду текстом."
@@ -168,7 +174,7 @@ class handler(BaseHTTPRequestHandler):
                 if not image_bytes:
                     reply = "⚠️ Не удалось скачать фотографию. Попробуйте ещё раз."
                 elif mode == MODE_ADD_PRODUCT:
-                    reply = save_product_from_photo(image_bytes)
+                    reply = process_add_product(raw_text=message.get("caption", ""), image_bytes=image_bytes)
                 else:
                     reply = "📷 **Фото блюда обработано!**\n\n" + process_user_meal_input(message.get("caption", ""), input_type="photo", image_bytes=image_bytes)
                 set_mode(chat_id, None)
@@ -195,7 +201,14 @@ class handler(BaseHTTPRequestHandler):
             return "🍲 Напишите или надиктуйте еду, например: *3 яйца, 80г макарон*."
         if text in ("➕ Добавить продукт", "/add_product"):
             set_mode(chat_id, MODE_ADD_PRODUCT)
-            return "➕ Отправьте фото упаковки с таблицей КБЖУ на 100 г."
+            return (
+                "➕ **Режим добавления продукта**\n\n"
+                "Сфотографируйте или опишите продукт:\n"
+                "• 📷 **Фото**: фото упаковки с таблицей КБЖУ, ценником или блюда.\n"
+                "• ✍️ **Текст**: напишите название, вес и цену (например: *«Торт медовик 800г, 7.5 евро»*).\n"
+                "• 🎤 **Голос**: надиктуйте описание продукта голосом.\n\n"
+                "ИИ распознает данные или автоматически рассчитает пищевую ценность!"
+            )
         if text in ("👨‍💼 Технический таск", "/task"):
             set_mode(chat_id, MODE_TASK)
             return "👨‍💼 Опишите задачу или желаемую функцию — я передам её Тимлиду."
@@ -206,7 +219,8 @@ class handler(BaseHTTPRequestHandler):
             set_mode(chat_id, None)
             return format_coach()
         if mode == MODE_ADD_PRODUCT:
-            return "➕ Для добавления продукта отправьте именно фотографию упаковки."
+            set_mode(chat_id, None)
+            return process_add_product(raw_text=text)
         set_mode(chat_id, None)
         return process_task_input(text) if mode == MODE_TASK else process_user_meal_input(text, input_type="webhook")
 
