@@ -187,9 +187,39 @@ a{color:inherit}
 .coach-msg h3{margin-bottom:8px; color:var(--warn); font-size:15px; margin-top:0;}
 .coach-msg p{margin:0 0 8px 0;}
 
-.product-card{background:var(--panel); padding:12px; border:1px solid var(--hair); border-radius:4px; font-size:13px;}
-.product-card strong{display:block; margin-bottom:4px; font-size:14px; text-transform:capitalize;}
-.product-card .price{color:var(--good); font-weight:600;}
+/* ---------- products table ---------- */
+.products-table-wrap{
+  width:100%; overflow-x:auto; margin-top:14px;
+  background:var(--panel); border:1px solid var(--hair); border-radius:4px; box-shadow:var(--shadow);
+  -webkit-overflow-scrolling:touch;
+}
+.products-table{
+  width:100%; border-collapse:collapse; font-size:13.5px; text-align:left; min-width:700px;
+}
+.products-table th{
+  background:var(--panel-2); color:var(--ink-2); font-family:"JetBrains Mono",monospace;
+  font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em;
+  padding:12px 14px; border-bottom:2px solid var(--hair); white-space:nowrap;
+}
+.products-table td{
+  padding:12px 14px; border-bottom:1px solid var(--hair); vertical-align:middle;
+}
+.products-table tr:last-child td{border-bottom:none;}
+.products-table tbody tr:hover td{background:color-mix(in srgb, var(--p) 4%, transparent);}
+.products-table .prod-name{font-weight:600; color:var(--ink); font-size:14px;}
+.products-table .prod-meta{font-size:11px; color:var(--ink-3); font-family:"JetBrains Mono",monospace; margin-top:2px;}
+.products-table .prod-verdict{font-size:11.5px; color:var(--ink-3); font-style:italic; margin-top:4px; line-height:1.35;}
+.products-table .num-cell{
+  font-family:"JetBrains Mono",monospace; font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap;
+}
+.score-badge{
+  display:inline-flex; align-items:center; justify-content:center; gap:5px;
+  padding:3px 10px; border-radius:999px; font-family:"JetBrains Mono",monospace;
+  font-size:12px; font-weight:700; white-space:nowrap;
+}
+.score-badge.good{background:var(--good-bg); color:var(--good);}
+.score-badge.warn{background:var(--warn-bg); color:var(--warn);}
+.score-badge.crit{background:var(--crit-bg); color:var(--crit);}
 </style>
 </head>
 <body>
@@ -358,21 +388,35 @@ a{color:inherit}
     <div id="coach-container"></div>
   </div>
 
-  <!-- Product Prices -->
+  <!-- Product Prices Table -->
   <div class="sect" id="sect-products" style="display:none;">
     <div class="sect-head">
-      <h2>База продуктов и цены (€)</h2>
-      <span class="eyebrow">Оценка полезности от тренера</span>
+      <h2>Таблица продуктов и цен (€)</h2>
+      <span class="eyebrow">Пищевая ценность и оценка тренера</span>
     </div>
     <hr class="rule-heavy">
-    <div id="products-container" style="margin-top:12px; display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:14px">
+    <div class="products-table-wrap">
+      <table class="products-table">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Название продукта</th>
+            <th style="text-align:right;">Калорийность (100г)</th>
+            <th style="text-align:right;">Белки (100г)</th>
+            <th style="text-align:right;">Жиры (100г)</th>
+            <th style="text-align:right;">Углеводы (100г)</th>
+            <th style="text-align:right;">Цена за 100г</th>
+            <th style="text-align:center;">Оценка тренера (1-10)</th>
+          </tr>
+        </thead>
+        <tbody id="products-tbody"></tbody>
+      </table>
     </div>
   </div>
 
 </div>
 
 <script>
-window.INITIAL_DATA = {"status": "success", "summary": {"date": "2026-09-13", "total_calories": 0.0, "total_protein": 0.0, "total_fat": 0.0, "total_carbs": 0.0, "active_calories": 0, "goals": {"calories": 2200, "protein_g": 160, "fat_g": 70, "carbs_g": 230, "weight_current": null, "weight_goal": null}}, "meals": [], "coach": {"summary": {"date": "2026-09-13", "total_calories": 0.0, "total_protein": 0.0, "total_fat": 0.0, "total_carbs": 0.0, "active_calories": 0, "goals": {"calories": 2200, "protein_g": 160, "fat_g": 70, "carbs_g": 230, "weight_current": null, "weight_goal": null}}, "recommendations": [{"severity": "warning", "message": "Вы еще не внесли данные о приемах пищи за сегодня. Зафиксируйте еду, чтобы отслеживать прогресс и контролировать баланс БЖУ."}, {"severity": "tip", "message": "Спланируйте первый прием пищи с высоким содержанием белка и сложных углеводов, чтобы планомерно продвигаться к вашей цели в 160 г белка."}]}, "products": [{"id": 16, "product_name": "куриная грудка", "category": "general", "price_rub": 8.5, "weight_g": 1000, "protein_per_100g": 31, "fat_per_100g": 4, "carbs_per_100g": 0, "calories_per_100g": 156, "updated_at": "2026-09-13T12:31:39.095239", "price_per_100g": 0.85, "currency": "€", "efficiency_score": 10.0, "coach_score": 10, "coach_verdict": "Эталонный источник чистого белка с минимальным содержанием жира. Идеально для дефицита калорий и сохранения мышц.", "efficiency_label": "Высокий", "badge_class": "good"}, {"id": 17, "product_name": "творог 5%", "category": "general", "price_rub": 1.5, "weight_g": 200, "protein_per_100g": 18, "fat_per_100g": 5, "carbs_per_100g": 3, "calories_per_100g": 130, "updated_at": "2026-09-13T12:31:39.586231", "price_per_100g": 0.75, "currency": "€", "efficiency_score": 9.6, "coach_score": 9, "coach_verdict": "Отличный медленный белок (казеин) и полезные молочные жиры. Прекрасно насыщает и подходит для перекуса или ужина.", "efficiency_label": "Высокий", "badge_class": "good"}], "history": {}};
+window.INITIAL_DATA = {"status": "success", "summary": {"date": "2026-09-13", "total_calories": 0.0, "total_protein": 0.0, "total_fat": 0.0, "total_carbs": 0.0, "active_calories": 0, "goals": {"calories": 2200, "protein_g": 160, "fat_g": 70, "carbs_g": 230, "weight_current": null, "weight_goal": null}}, "meals": [], "coach": {"summary": {"date": "2026-09-13", "total_calories": 0.0, "total_protein": 0.0, "total_fat": 0.0, "total_carbs": 0.0, "active_calories": 0, "goals": {"calories": 2200, "protein_g": 160, "fat_g": 70, "carbs_g": 230, "weight_current": null, "weight_goal": null}}, "recommendations": [{"severity": "warning", "message": "Вы еще не внесли ни одного приема пищи сегодня. Начните день с полноценного завтрака."}, {"severity": "tip", "message": "Чтобы комфортно набрать 160 г белка за день, распределите его равномерно по 3-4 приемам пищи."}]}, "products": [{"id": 16, "product_name": "куриная грудка", "category": "general", "price_rub": 8.5, "weight_g": 1000, "protein_per_100g": 31, "fat_per_100g": 4, "carbs_per_100g": 0, "calories_per_100g": 156, "updated_at": "2026-09-13T12:31:39.095239", "price_per_100g": 0.85, "currency": "€", "efficiency_score": 10.0, "coach_score": 10, "coach_verdict": "Эталонный источник чистого белка с минимальным содержанием жира. Идеально для дефицита калорий и сохранения мышц.", "efficiency_label": "Высокий", "badge_class": "good"}, {"id": 17, "product_name": "творог 5%", "category": "general", "price_rub": 1.5, "weight_g": 200, "protein_per_100g": 18, "fat_per_100g": 5, "carbs_per_100g": 3, "calories_per_100g": 130, "updated_at": "2026-09-13T12:31:39.586231", "price_per_100g": 0.75, "currency": "€", "efficiency_score": 9.6, "coach_score": 9, "coach_verdict": "Отличный медленный белок (казеин) и полезные молочные жиры. Прекрасно насыщает и подходит для перекуса или ужина.", "efficiency_label": "Высокий", "badge_class": "good"}], "history": {}};
 let currentDate = new Date().toISOString().split('T')[0];
 
 async function loadLiveDashboard(dateParam = null) {
@@ -545,31 +589,33 @@ function updateUI(data) {
     document.getElementById('sect-coach').style.display = 'none';
   }
 
-  // Products Update
-  const prodCont = document.getElementById('products-container');
+  // Products Table Update
+  const prodTbody = document.getElementById('products-tbody');
   if (products && products.length > 0) {
     document.getElementById('sect-products').style.display = 'block';
-    prodCont.innerHTML = products.map(p => {
+    prodTbody.innerHTML = products.map(p => {
       const price100 = (p.price_per_100g || 0).toFixed(2);
       const totalPrice = (p.price_rub || 0).toFixed(2);
       const weight = Math.round(p.weight_g || 100);
       const score = p.coach_score || p.efficiency_score || 5;
+      const scoreClass = score >= 8 ? 'good' : (score >= 5 ? 'warn' : 'crit');
       const scoreBadge = score >= 8 ? '🟢' : (score >= 5 ? '🟡' : '🔴');
       return `
-      <div class="product-card" style="background:var(--bg-card, #fff); border:1px solid var(--border, #e5e7eb); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:6px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-          <strong style="font-size:15px; color:var(--ink, #111);">${escapeHtml(p.product_name)}</strong>
-          <span style="font-size:12px; font-weight:700; white-space:nowrap; padding:2px 8px; border-radius:12px; background:rgba(0,0,0,0.04);">${scoreBadge} ${score}/10</span>
-        </div>
-        <div class="price" style="font-size:14px; font-weight:700; color:var(--p, #10b981); margin-top:2px;">
-          ${price100} € <span style="font-size:12px; font-weight:normal; color:var(--ink-3, #6b7280);">/ 100г</span>
-          ${totalPrice > 0 ? `<span style="font-size:11.5px; font-weight:normal; color:var(--ink-3, #6b7280);">(${totalPrice} € за ${weight}г)</span>` : ''}
-        </div>
-        <div style="color:var(--ink-2, #374151); font-size:12px; line-height:1.4;">
-          🔥 <strong>${p.calories_per_100g || 0}</strong> ккал | Б: <strong>${p.protein_per_100g || 0}</strong>г | Ж: <strong>${p.fat_per_100g || 0}</strong>г | У: <strong>${p.carbs_per_100g || 0}</strong>г
-        </div>
-        ${p.coach_verdict ? `<div style="font-size:11.5px; color:var(--ink-3, #4b5563); margin-top:4px; font-style:italic; line-height:1.35; border-top:1px dashed rgba(0,0,0,0.1); padding-top:6px;">💬 «${escapeHtml(p.coach_verdict)}»</div>` : ''}
-      </div>
+      <tr>
+        <td>
+          <div class="prod-name">${escapeHtml(p.product_name)}</div>
+          ${totalPrice > 0 && weight !== 100 ? `<div class="prod-meta">Упаковка: ${weight}г (${totalPrice} €)</div>` : ''}
+          ${p.coach_verdict ? `<div class="prod-verdict">💬 «${escapeHtml(p.coach_verdict)}»</div>` : ''}
+        </td>
+        <td class="num-cell"><strong>${Math.round(p.calories_per_100g || 0)}</strong> <small style="color:var(--ink-3)">ккал</small></td>
+        <td class="num-cell" style="color:var(--p); font-weight:600;">${p.protein_per_100g || 0}г</td>
+        <td class="num-cell" style="color:var(--f); font-weight:600;">${p.fat_per_100g || 0}г</td>
+        <td class="num-cell" style="color:var(--c); font-weight:600;">${p.carbs_per_100g || 0}г</td>
+        <td class="num-cell" style="font-weight:700; color:var(--good);">${price100} €</td>
+        <td style="text-align:center;">
+          <span class="score-badge ${scoreClass}">${scoreBadge} ${score}/10</span>
+        </td>
+      </tr>
       `;
     }).join('');
   } else {

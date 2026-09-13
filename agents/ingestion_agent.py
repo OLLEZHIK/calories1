@@ -471,33 +471,88 @@ Return ONLY a valid JSON object in this exact format:
     price_str = f"{price:.2f} €" if price is not None else "Не указана"
     price_100_str = f" ({price_per_100g:.2f} € за 100г)" if price_per_100g is not None else ""
 
+    # Build a single-item table for this product
+    prod_data = [{
+        "product_name": product_name,
+        "calories_per_100g": cal_100,
+        "protein_per_100g": p_100,
+        "fat_per_100g": f_100,
+        "carbs_per_100g": c_100,
+        "price_per_100g": price_per_100g or 0,
+        "coach_score": coach_score
+    }]
+    table_str = build_products_ascii_table(prod_data)
+
     lines = [
-        "✅ **Продукт добавлен в базу:**\n",
-        f"• **Название продукта:** {product_name}",
-        f"• **Калорийность на 100 грамм:** {int(round(cal_100))} ккал{macro_tag}",
-        f"• **Белки на 100 грамм:** {round(p_100, 1)} г",
-        f"• **Жиры на 100 грамм:** {round(f_100, 1)} г",
-        f"• **Углеводы на 100 грамм:** {round(c_100, 1)} г",
+        "✅ **Продукт добавлен в таблицу базы!**\n",
+        f"```\n{table_str}\n```",
     ]
 
-    if abs(weight_g - 100.0) > 1.0:
-        lines.append(
-            f"• **Пищевая ценность упаковки ({int(round(weight_g))} г):** "
-            f"{total_cal} ккал | Б: {total_p} г | Ж: {total_f} г | У: {total_c} г"
-        )
+    if abs(weight_g - 100.0) > 1.0 or (price is not None and price > 0):
+        pkg_parts = []
+        if abs(weight_g - 100.0) > 1.0:
+            pkg_parts.append(f"Упаковка: **{int(round(weight_g))}г**")
+        if price is not None and price > 0:
+            pkg_parts.append(f"Цена: **{price:.2f} €**")
+        if abs(weight_g - 100.0) > 1.0:
+            pkg_parts.append(f"КБЖУ: **{total_cal} ккал** (Б:{total_p}г | Ж:{total_f}г | У:{total_c}г)")
+        lines.append(f"📦 {' | '.join(pkg_parts)}")
 
-    lines.append(f"• **Цена:** {price_str}{price_100_str}")
-    lines.append(f"• **Оценка полезности от тренера:** {coach_score}/10 ({score_badge})")
-    lines.append(f"  _«{coach_verdict}»_")
-
-    lines.append(f"\n💾 Продукт сохранён. Теперь можно просто писать в рацион: *«съел 150г {product_name.lower()}»*.")
-    lines.append("🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)")
+    lines.append(f"🏋️ **Оценка полезности тренера:** {score_badge} **{coach_score}/10**")
+    lines.append(f"💬 _{coach_verdict}_")
+    lines.append(f"\n💾 Продукт сохранён в таблице. Теперь можно просто писать: *«съел 150г {product_name.lower()}»*.")
+    lines.append("🌐 [Открыть Таблицу на Vercel](https://fatcaunter.vercel.app)")
 
     return "\n".join(lines)
 
 
+def build_products_ascii_table(products: List[Dict[str, Any]]) -> str:
+    """
+    Renders an ASCII table with the 7 columns:
+    1. Название продукта
+    2. Ккал (на 100г)
+    3. Белки
+    4. Жиры
+    5. Углеводы
+    6. Цена за 100г (€)
+    7. Оценка тренера (1-10)
+    """
+    w_name = 14
+    w_cal = 5
+    w_p = 4
+    w_f = 4
+    w_c = 4
+    w_pr = 7
+    w_sc = 7
+
+    top    = f"┌{'─'*(w_name+2)}┬{'─'*(w_cal+2)}┬{'─'*(w_p+2)}┬{'─'*(w_f+2)}┬{'─'*(w_c+2)}┬{'─'*(w_pr+2)}┬{'─'*(w_sc+2)}┐"
+    header = f"│ {'Продукт':<{w_name}} │ {'Ккал':>{w_cal}} │ {'Б':>{w_p}} │ {'Ж':>{w_f}} │ {'У':>{w_c}} │ {'Цена':>{w_pr}} │ {'Тренер':^{w_sc}} │"
+    sep    = f"├{'─'*(w_name+2)}┼{'─'*(w_cal+2)}┼{'─'*(w_p+2)}┼{'─'*(w_f+2)}┼{'─'*(w_c+2)}┼{'─'*(w_pr+2)}┼{'─'*(w_sc+2)}┤"
+    bot    = f"└{'─'*(w_name+2)}┴{'─'*(w_cal+2)}┴{'─'*(w_p+2)}┴{'─'*(w_f+2)}┴{'─'*(w_c+2)}┴{'─'*(w_pr+2)}┴{'─'*(w_sc+2)}┘"
+
+    rows = [top, header, sep]
+    for p in products:
+        name = (p.get("product_name") or "Продукт").capitalize()
+        if len(name) > w_name:
+            name = name[:w_name-1] + "…"
+        cal = str(int(round(float(p.get("calories_per_100g") or 0))))
+        prot = str(round(float(p.get("protein_per_100g") or 0), 1) if float(p.get("protein_per_100g") or 0) % 1 else int(round(float(p.get("protein_per_100g") or 0))))
+        fat = str(round(float(p.get("fat_per_100g") or 0), 1) if float(p.get("fat_per_100g") or 0) % 1 else int(round(float(p.get("fat_per_100g") or 0))))
+        carb = str(round(float(p.get("carbs_per_100g") or 0), 1) if float(p.get("carbs_per_100g") or 0) % 1 else int(round(float(p.get("carbs_per_100g") or 0))))
+        price_100 = float(p.get("price_per_100g") or 0)
+        pr_str = f"{price_100:.2f}€" if price_100 > 0 else "-"
+        score = int(p.get("coach_score") or p.get("efficiency_score") or 5)
+        badge = "🟢" if score >= 8 else ("🟡" if score >= 5 else "🔴")
+        sc_str = f"{badge}{score:>2}/10"
+
+        row = f"│ {name:<{w_name}} │ {cal:>{w_cal}} │ {prot:>{w_p}} │ {fat:>{w_f}} │ {carb:>{w_c}} │ {pr_str:>{w_pr}} │ {sc_str:^{w_sc}} │"
+        rows.append(row)
+    rows.append(bot)
+    return "\n".join(rows)
+
+
 def format_products_catalog() -> str:
-    """Format the full list of products stored in database with macros in 100g, EUR price, and coach rating."""
+    """Format the full list of products stored in database as a table with macros in 100g, EUR price, and coach rating."""
     from database.db import get_product_prices
     products = get_product_prices()
     if not products:
@@ -506,30 +561,21 @@ def format_products_catalog() -> str:
             "Нажмите кнопку **«➕ Добавить продукт»**, чтобы добавить первый продукт (текстом, голосом или фото)!"
         )
 
-    lines = ["📋 **Список продуктов в вашей базе:**\n"]
+    table_str = build_products_ascii_table(products)
+
+    lines = [
+        "📊 **Таблица продуктов (пищевая ценность на 100 г):**\n",
+        f"```\n{table_str}\n```\n",
+        "💬 **Оценка полезности и вердикты тренера:**"
+    ]
+
     for i, p in enumerate(products, 1):
         name = p.get("product_name", "Продукт").capitalize()
-        cal = p.get("calories_per_100g", 0)
-        prot = p.get("protein_per_100g", 0)
-        fat = p.get("fat_per_100g", 0)
-        carb = p.get("carbs_per_100g", 0)
-        weight = int(round(float(p.get("weight_g", 100) or 100)))
-        price_tot = float(p.get("price_rub", 0) or 0)
-        price_100 = float(p.get("price_per_100g", 0) or 0)
         score = int(p.get("coach_score") or p.get("efficiency_score") or 5)
         badge = "🟢" if score >= 8 else ("🟡" if score >= 5 else "🔴")
         verdict = p.get("coach_verdict") or ""
+        lines.append(f"• **{name}** ({badge} {score}/10): _{verdict}_")
 
-        lines.append(f"{i}. **{name}**")
-        lines.append(f"   • Калорийность: {cal} ккал / 100г")
-        lines.append(f"   • Белки: {prot} г | Жиры: {fat} г | Углеводы: {carb} г")
-        if price_tot > 0:
-            lines.append(f"   • Цена: {price_tot:.2f} € за {weight}г ({price_100:.2f} € за 100г)")
-        lines.append(f"   • Оценка тренера: {badge} {score}/10")
-        if verdict:
-            lines.append(f"     _«{verdict}»_")
-        lines.append("")
-
-    lines.append("💡 Чтобы добавить продукт, нажмите кнопку **«➕ Добавить продукт»**.")
-    lines.append("🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)")
+    lines.append("\n💡 Чтобы добавить продукт, нажмите кнопку **«➕ Добавить продукт»**.")
+    lines.append("🌐 [Открыть онлайн-таблицу на Vercel](https://fatcaunter.vercel.app)")
     return "\n".join(lines)
