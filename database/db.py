@@ -482,6 +482,27 @@ def clear_recent_meals(limit: int = 5) -> int:
             count += 1
     return count
 
+def delete_product(product_name: str) -> bool:
+    """Deletes a product from product_prices, custom_products, and coach_recommendations."""
+    p_clean = product_name.lower().strip()
+    with get_connection() as conn:
+        conn.execute("DELETE FROM product_prices WHERE LOWER(product_name) = ?", (p_clean,))
+        conn.execute("DELETE FROM custom_products WHERE LOWER(product_name) = ?", (p_clean,))
+        conn.execute("DELETE FROM coach_recommendations WHERE topic LIKE ?", (f"%{p_clean}%",))
+        conn.commit()
+
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            enc = urllib.parse.quote(p_clean)
+            supabase_request(f"product_prices?product_name=ilike.{enc}", method="DELETE")
+            supabase_request(f"custom_products?product_name=ilike.{enc}", method="DELETE")
+            supabase_request(f"coach_recommendations?topic=ilike.*{enc}*", method="DELETE")
+        except Exception as e:
+            print(f"Supabase delete product warning: {e}")
+
+    return True
+
+
 
 def save_product_price(product_name: str, price_rub: float, weight_g: float, category: str = "general",
                        protein_100g: float = 0, fat_100g: float = 0, carbs_100g: float = 0, calories_100g: float = 0,

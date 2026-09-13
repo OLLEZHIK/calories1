@@ -201,6 +201,18 @@ def start_bot():
                 await clear_command(update, context)
                 return
 
+            import re
+            m_del = re.match(r'^(?:удали|удалить|стереть|сотри)\s+продукт\s+(.+)$', text.strip().lower())
+            if m_del:
+                from database.db import delete_product
+                p_to_del = m_del.group(1).strip()
+                delete_product(p_to_del)
+                await update.message.reply_markdown(
+                    f"✅ Продукт **{p_to_del.capitalize()}** успешно удален из базы и таблицы!\n\n{format_products_catalog()}",
+                    reply_markup=main_keyboard
+                )
+                return
+
             if text in ("📋 Список продуктов", "/products", "продукты", "список продуктов"):
                 await products_command(update, context)
                 return
