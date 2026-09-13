@@ -12,19 +12,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agents.audio_agent import audio_agent
 from agents.ingestion_agent import process_add_product, format_products_catalog
 from bot.telegram_bot import process_task_input, process_user_meal_input
+from bot.meal_cleanup import (
+    get_clear_records_view,
+    handle_delete_meal_action,
+    handle_delete_all_action,
+    parse_and_execute_text_delete,
+)
 from database.db import get_bot_session_mode, get_today_summary, save_custom_product, set_bot_session_mode
 from gemini_client import get_genai_client
 
 MODE_FOOD = "food"
 MODE_TASK = "task"
 MODE_ADD_PRODUCT = "add_product"
+MODE_CLEAR = "clear_records"
 SESSION_MODES: Dict[str, str] = {}
 
 MAIN_KEYBOARD = {
     "keyboard": [
         [{"text": "🍲 Запись приема пищи"}, {"text": "➕ Добавить продукт"}],
         [{"text": "📊 Итоги за сегодня"}, {"text": "💡 Советы ИИ-тренера"}],
-        [{"text": "📋 Список продуктов"}, {"text": "👨‍💼 Технический таск"}],
+        [{"text": "📋 Список продуктов"}, {"text": "🗑 Очистить записи"}],
+        [{"text": "👨‍💼 Технический таск"}],
     ],
     "resize_keyboard": True,
 }
@@ -40,6 +48,34 @@ def send_telegram_message(token: str, chat_id: int, text: str, reply_markup: Opt
             pass
     except Exception as exc:
         print(f"Telegram send error: {type(exc).__name__}: {exc}")
+
+
+def answer_callback_query(token: str, callback_query_id: str, text: Optional[str] = None) -> None:
+    """Answer callback query from inline buttons."""
+    url = f"https://api.telegram.org/bot{token}/answerCallbackQuery"
+    payload = {"callback_query_id": callback_query_id}
+    if text:
+        payload["text"] = text
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=8):
+            pass
+    except Exception as exc:
+        print(f"Telegram answerCallbackQuery error: {exc}")
+
+
+def edit_telegram_message(token: str, chat_id: int, message_id: int, text: str, reply_markup: Optional[Dict[str, Any]] = None) -> None:
+    """Edit existing Telegram message text and inline keyboard."""
+    url = f"https://api.telegram.org/bot{token}/editMessageText"
+    payload = {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "Markdown"}
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+    except Exception as exc:
+        print(f"Telegram editMessageText error: {exc}")
 
 
 def get_telegram_file_bytes(token: str, file_id: str) -> bytes:
@@ -148,7 +184,44 @@ class handler(BaseHTTPRequestHandler):
                 self.send_response(403)
                 self.end_headers()
                 return
-            message = json.loads(post_data).get("message", {})
+            update_data = json.loads(post_data)
+
+            # 1. Handle Inline Keyboard Callback Queries (e.g. Delete record)
+            if "callback_query" in update_data:
+                cb = update_data["callback_query"]
+                cb_id = cb.get("id")
+                cb_data = cb.get("data", "")
+                cb_msg = cb.get("message", {})
+                chat_id = cb_msg.get("chat", {}).get("id")
+                msg_id = cb_msg.get("message_id")
+                if chat_id and is_authorized(chat_id):
+                    if cb_data.startswith("del_meal_"):
+                        meal_id = int(cb_data.replace("del_meal_", ""))
+                        answer_callback_query(token, cb_id, "Запись стёрта!")
+                        resp_text, new_markup = handle_delete_meal_action(meal_id)
+                        if msg_id:
+                            edit_telegram_message(token, chat_id, msg_id, resp_text, new_markup)
+                        else:
+                            send_telegram_message(token, chat_id, resp_text, new_markup)
+                    elif cb_data == "del_meals_all":
+                        set_mode(chat_id, None)
+                        answer_callback_query(token, cb_id, "Все записи стёрты!")
+                        resp_text = handle_delete_all_action(5)
+                        if msg_id:
+                            edit_telegram_message(token, chat_id, msg_id, resp_text, None)
+                        else:
+                            send_telegram_message(token, chat_id, resp_text)
+                    elif cb_data == "del_meals_cancel":
+                        set_mode(chat_id, None)
+                        answer_callback_query(token, cb_id, "Отменено")
+                        if msg_id:
+                            edit_telegram_message(token, chat_id, msg_id, "❌ Операция очистки записей отменена.", None)
+                        else:
+                            send_telegram_message(token, chat_id, "❌ Операция очистки записей отменена.")
+                self._respond_ok()
+                return
+
+            message = update_data.get("message", {})
             chat_id = message.get("chat", {}).get("id")
             if not chat_id or not is_authorized(chat_id):
                 self._respond_ok()
@@ -193,6 +266,7 @@ class handler(BaseHTTPRequestHandler):
         self._respond_ok()
 
     def _handle_text(self, chat_id: int, text: str, mode: Optional[str]) -> str:
+        token = os.getenv("TELEGRAM_BOT_TOKEN", "")
         if text in ("/start", "меню", "главное меню"):
             set_mode(chat_id, None)
             return "👋 **Calories AI**\n\nВыберите действие кнопками ниже."
@@ -212,6 +286,11 @@ class handler(BaseHTTPRequestHandler):
         if text in ("👨‍💼 Технический таск", "/task"):
             set_mode(chat_id, MODE_TASK)
             return "👨‍💼 Опишите задачу или желаемую функцию — я передам её Тимлиду."
+        if text in ("🗑 Очистить записи", "/clear", "/delete", "очистить записи", "стереть записи"):
+            set_mode(chat_id, MODE_CLEAR)
+            view_text, markup, _ = get_clear_records_view()
+            send_telegram_message(token, chat_id, view_text, reply_markup=markup or MAIN_KEYBOARD)
+            return ""
         if text in ("📋 Список продуктов", "/products", "продукты", "список продуктов"):
             set_mode(chat_id, None)
             return format_products_catalog()
@@ -221,6 +300,15 @@ class handler(BaseHTTPRequestHandler):
         if text in ("💡 Советы ИИ-тренера", "/coach"):
             set_mode(chat_id, None)
             return format_coach()
+        if mode == MODE_CLEAR:
+            del_res = parse_and_execute_text_delete(text)
+            if del_res:
+                resp_text, new_markup = del_res
+                if "отменен" in resp_text.lower() or "все" in text.lower():
+                    set_mode(chat_id, None)
+                send_telegram_message(token, chat_id, resp_text, reply_markup=new_markup or MAIN_KEYBOARD)
+                return ""
+            set_mode(chat_id, None)
         if mode == MODE_ADD_PRODUCT:
             set_mode(chat_id, None)
             return process_add_product(raw_text=text)

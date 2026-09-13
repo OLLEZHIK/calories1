@@ -12,6 +12,13 @@ from agents.audio_agent import audio_agent
 from agents.ingestion_agent import process_add_product, format_products_catalog
 from database.db import save_meal, get_today_summary
 
+from bot.meal_cleanup import (
+    get_clear_records_view,
+    handle_delete_meal_action,
+    handle_delete_all_action,
+    parse_and_execute_text_delete,
+)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("CaloriesBot")
 
@@ -42,17 +49,26 @@ def start_bot():
         return
 
     try:
-        from telegram import Update, ReplyKeyboardMarkup
+        from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
         from telegram.ext import (
-            ApplicationBuilder, CommandHandler, MessageHandler,
+            ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
             filters, ContextTypes
         )
+
+        def to_inline_markup(markup_dict):
+            if not markup_dict or "inline_keyboard" not in markup_dict:
+                return None
+            return InlineKeyboardMarkup([
+                [InlineKeyboardButton(btn["text"], callback_data=btn["callback_data"]) for btn in row]
+                for row in markup_dict["inline_keyboard"]
+            ])
 
         main_keyboard = ReplyKeyboardMarkup(
             [
                 ["🍲 Запись приема пищи", "➕ Добавить продукт"],
                 ["📊 Итоги за сегодня",  "💡 Советы ИИ-тренера"],
-                ["📋 Список продуктов", "👨‍💼 Технический таск"]
+                ["📋 Список продуктов", "🗑 Очистить записи"],
+                ["👨‍💼 Технический таск"]
             ],
             resize_keyboard=True
         )
@@ -61,6 +77,7 @@ def start_bot():
         MODE_FOOD = "food"
         MODE_TASK = "task"
         MODE_ADD_PRODUCT = "add_product"
+        MODE_CLEAR = "clear_records"
 
         def get_mode(ctx):
             return ctx.user_data.get("mode")
@@ -113,6 +130,32 @@ def start_bot():
             set_mode(context, None)
             await update.message.reply_markdown(format_products_catalog(), reply_markup=main_keyboard)
 
+        # ── /clear ────────────────────────────────────────────────────────
+        async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            set_mode(context, MODE_CLEAR)
+            text, markup, _ = get_clear_records_view()
+            inline_kb = to_inline_markup(markup)
+            await update.message.reply_markdown(text, reply_markup=inline_kb or main_keyboard)
+
+        # ── Callback query handler ────────────────────────────────────────
+        async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            query = update.callback_query
+            data = query.data or ""
+            if data.startswith("del_meal_"):
+                meal_id = int(data.replace("del_meal_", ""))
+                msg, markup = handle_delete_meal_action(meal_id)
+                await query.answer("Запись стёрта!")
+                await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=to_inline_markup(markup))
+            elif data == "del_meals_all":
+                set_mode(context, None)
+                msg = handle_delete_all_action(5)
+                await query.answer("Все записи стёрты!")
+                await query.edit_message_text(msg, parse_mode="Markdown")
+            elif data == "del_meals_cancel":
+                set_mode(context, None)
+                await query.answer("Отменено")
+                await query.edit_message_text("❌ Операция очистки записей отменена.", parse_mode="Markdown")
+
         # ── Text handler ──────────────────────────────────────────────────
         async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (update.message.text or "").strip()
@@ -154,6 +197,10 @@ def start_bot():
                 )
                 return
 
+            if text in ("🗑 Очистить записи", "/clear", "/delete", "очистить записи", "стереть записи"):
+                await clear_command(update, context)
+                return
+
             if text in ("📋 Список продуктов", "/products", "продукты", "список продуктов"):
                 await products_command(update, context)
                 return
@@ -167,6 +214,16 @@ def start_bot():
                 return
 
             # Route based on active session mode
+            if mode == MODE_CLEAR:
+                del_result = parse_and_execute_text_delete(text)
+                if del_result:
+                    resp_text, new_markup = del_result
+                    if "отменен" in resp_text.lower() or "все" in text.lower():
+                        set_mode(context, None)
+                    await update.message.reply_markdown(resp_text, reply_markup=to_inline_markup(new_markup) or main_keyboard)
+                    return
+                set_mode(context, None)
+
             if mode == MODE_ADD_PRODUCT:
                 set_mode(context, None)
                 response = process_add_product(raw_text=text)
@@ -253,6 +310,9 @@ def start_bot():
         app.add_handler(CommandHandler("summary", summary_command))
         app.add_handler(CommandHandler("coach", coach_command))
         app.add_handler(CommandHandler("products", products_command))
+        app.add_handler(CommandHandler("clear", clear_command))
+        app.add_handler(CommandHandler("delete", clear_command))
+        app.add_handler(CallbackQueryHandler(handle_callback_query))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         app.add_handler(MessageHandler(filters.VOICE, handle_voice))
         app.add_handler(MessageHandler(filters.PHOTO, handle_photo))

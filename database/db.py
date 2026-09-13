@@ -455,6 +455,34 @@ def get_meals_for_days(days: int = 3) -> List[Dict[str, Any]]:
             })
         return result
 
+def delete_meal(meal_id: int) -> bool:
+    """Deletes a meal and its associated items by meal_id from SQLite and Supabase."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM meal_items WHERE meal_id = ?", (meal_id,))
+        conn.execute("DELETE FROM meals WHERE id = ?", (meal_id,))
+        conn.commit()
+
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            supabase_request(f"meal_items?meal_id=eq.{meal_id}", method="DELETE")
+            supabase_request(f"meals?id=eq.{meal_id}", method="DELETE")
+        except Exception as e:
+            print(f"Supabase delete meal warning: {e}")
+
+    return True
+
+def clear_recent_meals(limit: int = 5) -> int:
+    """Deletes the last N meals from SQLite and Supabase."""
+    recent = get_recent_meals(limit=limit)
+    count = 0
+    for m in recent:
+        mid = m.get("id")
+        if mid:
+            delete_meal(mid)
+            count += 1
+    return count
+
+
 def save_product_price(product_name: str, price_rub: float, weight_g: float, category: str = "general",
                        protein_100g: float = 0, fat_100g: float = 0, carbs_100g: float = 0, calories_100g: float = 0,
                        coach_score: int = 0, coach_verdict: str = ""):
