@@ -66,6 +66,21 @@ def apply_fried_egg_oil_rule(items: List[Dict[str, Any]], raw_text: str = "") ->
     return items
 
 
+def normalize_raw_food_names(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Culinary Rule: The user specifies portions and prices in RAW form.
+    Maps 'шашлык свиной', 'шашлык из свинины', 'шашлык свиная шея', 'свиной стейк', etc.
+    directly to 'свинина' so that raw pork nutrition and price are always applied.
+    """
+    for item in items:
+        p_name = (item.get("product_name") or "").strip().lower()
+        if "шашлык" in p_name and ("свин" in p_name or "ше" in p_name or "мяс" in p_name or p_name == "шашлык"):
+            item["product_name"] = "свинина"
+        elif any(k in p_name for k in ["свиной стейк", "стейк из свинины", "свиная вырезка", "свиная шея", "жареная свинина"]):
+            item["product_name"] = "свинина"
+    return items
+
+
 class IngestionAgent:
     """
     Agent 1: Ingestion & LLM Structuring Agent
@@ -154,6 +169,9 @@ RULES:
    - "explicit_protein": 0, "explicit_fat": 0, "explicit_carbs": 0
    And set the "meal_type" of this block to "Активность".
 5. FRIED EGGS RULE: If the user mentions fried eggs ("жареное яйцо", "жареные яйца", "яичница", "глазунья", "пожарил N яиц"), extract the eggs (approx 55g per egg) AND automatically add a companion food item: "масло сливочное" with quantity_g = 2g per egg (e.g. 3 fried eggs = 3 eggs (165g) + 6g масло сливочное), unless user explicitly specified another oil amount.
+6. RAW FOODS & PORK RULE (СЫРОЙ ВИД И СВИНИНА):
+   - The user ALWAYS specifies weights, portions, and prices in RAW form (в сыром виде продуктов).
+   - If the user mentions "шашлык свиной", "шашлык из свинины", "шашлык свиная шея", "свиная шея", "свиной стейк", "жареная свинина" or similar cooked pork dishes, ALWAYS normalize the product_name directly to "свинина". If the user says "шашлык свиной 100 г", this means exactly 100g of raw "свинина".
 
 Return ONLY valid JSON, no markdown, no explanation:
 {"meals": [{"meal_type": "Завтрак", "items": [{"product_name": "куриное яйцо", "quantity_g": 165, "explicit_kcal": null, "explicit_protein": null, "explicit_fat": null, "explicit_carbs": null}]}]}"""
@@ -189,7 +207,7 @@ Return ONLY valid JSON, no markdown, no explanation:
                     meals = parsed.get("meals", [])
                     if meals:
                         for m in meals:
-                            m["items"] = apply_fried_egg_oil_rule(m.get("items", []), raw_input)
+                            m["items"] = normalize_raw_food_names(apply_fried_egg_oil_rule(m.get("items", []), raw_input))
                         return meals
             except Exception as e:
                 print(f"Gemini ingestion error: {e}")
@@ -226,12 +244,12 @@ Return ONLY valid JSON, no markdown, no explanation:
                         parsed = json.loads(json_match.group(1))
                         meals = parsed.get("meals", [])
                         for m in meals:
-                            m["items"] = apply_fried_egg_oil_rule(m.get("items", []), raw_input)
+                            m["items"] = normalize_raw_food_names(apply_fried_egg_oil_rule(m.get("items", []), raw_input))
                         return meals
                     parsed = json.loads(content)
                     meals = parsed.get("meals", [])
                     for m in meals:
-                        m["items"] = apply_fried_egg_oil_rule(m.get("items", []), raw_input)
+                        m["items"] = normalize_raw_food_names(apply_fried_egg_oil_rule(m.get("items", []), raw_input))
                     return meals
             except Exception as e:
                 print(f"Groq ingestion fallback error: {e}")
@@ -318,7 +336,7 @@ Return ONLY valid JSON, no markdown, no explanation:
                 "raw_part": part
             })
 
-        return apply_fried_egg_oil_rule(items, raw_input)
+        return normalize_raw_food_names(apply_fried_egg_oil_rule(items, raw_input))
 
 
 ingestion_agent = IngestionAgent()

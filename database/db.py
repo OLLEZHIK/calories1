@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import re
+import time
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -9,6 +10,28 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, date, timedelta
 from config import DB_PATH, SUPABASE_URL, SUPABASE_KEY, USE_SUPABASE, DEFAULT_GOALS
 from pathlib import Path
+
+_MEM_CACHE: Dict[str, Dict[str, Any]] = {}
+
+def cache_get(key: str, ttl: float = 60.0) -> Any:
+    """Returns cached value if within TTL, else None."""
+    entry = _MEM_CACHE.get(key)
+    if entry and (time.time() - entry["ts"]) < ttl:
+        return entry["val"]
+    return None
+
+def cache_set(key: str, val: Any) -> None:
+    """Stores value in memory with current timestamp."""
+    _MEM_CACHE[key] = {"val": val, "ts": time.time()}
+
+def cache_invalidate(*keys: str) -> None:
+    """Evicts keys from memory cache. If no keys given, clears entire cache."""
+    if not keys:
+        _MEM_CACHE.clear()
+    else:
+        for k in keys:
+            _MEM_CACHE.pop(k, None)
+
 
 def supabase_request(
     endpoint: str,
@@ -94,6 +117,14 @@ def init_db():
 def stem_product_word(w: str) -> str:
     """Stem Russian food words by stripping adjective and plural/case endings."""
     w = w.strip().lower()
+    if w.startswith("свин"):
+        return "свин"
+    if w.startswith("куриц") or w.startswith("курин") or (w.startswith("кур") and len(w) <= 6):
+        return "кур"
+    if w.startswith("говяд"):
+        return "говяд"
+    if w.startswith("индейк") or w.startswith("индей"):
+        return "индей"
     w = re.sub(r'(?:ые|ие|ое|ее|ая|яя|ый|ий|ой|ых|их|ым|им|ую|юю)$', '', w)
     w = re.sub(r'(?:ами|ями|ов|ев|ей|ам|ям|ах|ях)$', '', w)
     w = re.sub(r'(?:цы|ки|лы|ры|сы|ты|ды|бы|пы|мы|ны|вы|зы)$', lambda m: m.group(0)[0], w)
@@ -105,12 +136,19 @@ def are_product_duplicates(name1: str, name2: str) -> bool:
     """
     Checks if two product names refer to the same food item:
     1. Exact lower-case match.
-    2. Normalized token set match (ignoring word order and Russian plural/case inflections).
-    3. High fuzzy string similarity (> 0.82).
+    2. Domain mapping (shashlik pork, svinina, svinina poluzhirnaya).
+    3. Normalized token set match (ignoring word order and Russian plural/case inflections).
+    4. High fuzzy string similarity (> 0.82).
     """
     n1 = name1.strip().lower()
     n2 = name2.strip().lower()
     if n1 == n2:
+        return True
+
+    # Domain canonical matching: pork dishes -> raw svinina
+    is_pork1 = ("шашлык" in n1 and "свин" in n1) or (n1 in ["свинина", "свинина полужирная", "шашлык свиной"])
+    is_pork2 = ("шашлык" in n2 and "свин" in n2) or (n2 in ["свинина", "свинина полужирная", "шашлык свиной"])
+    if is_pork1 and is_pork2:
         return True
 
     toks1 = sorted([stem_product_word(t) for t in re.sub(r'[^\w\s%]', ' ', n1).split() if len(t) > 1])
@@ -412,7 +450,11 @@ def calculate_nutrition_goals(weight_current: float, mode: str = "loss_300", wei
     }
 
 def get_user_goals() -> Dict[str, Any]:
-    """Returns the user's active goals, current weight, and goal mode."""
+    """Returns the user's active goals, current weight, and goal mode (cached 60s)."""
+    cached = cache_get("user_goals", ttl=60.0)
+    if cached is not None:
+        return cached
+
     weight_current = 76.0
     weight_goal = 67.0
     goal_mode = "loss_300"
@@ -450,7 +492,9 @@ def get_user_goals() -> Dict[str, Any]:
         except Exception as e:
             print(f"Supabase user_goals read error: {e}")
 
-    return calculate_nutrition_goals(weight_current, mode=goal_mode, weight_goal=weight_goal)
+    goals = calculate_nutrition_goals(weight_current, mode=goal_mode, weight_goal=weight_goal)
+    cache_set("user_goals", goals)
+    return goals
 
 def save_user_weight_and_goals(weight_current: float, mode: Optional[str] = None, weight_goal: Optional[float] = None) -> Dict[str, Any]:
     """
@@ -527,11 +571,16 @@ def save_user_weight_and_goals(weight_current: float, mode: Optional[str] = None
     except Exception:
         pass
 
+    cache_invalidate("user_goals")
     return goals
 
-def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
+def get_today_summary(target_date: Optional[str] = None, price_map: Optional[Dict[str, float]] = None, goals: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     if not target_date:
         target_date = date.today().isoformat()
+    if price_map is None:
+        price_map = get_product_price_map()
+    if goals is None:
+        goals = get_user_goals()
 
     # Query Supabase Cloud DB if configured
     if SUPABASE_URL and SUPABASE_KEY:
@@ -548,7 +597,6 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
                 tot_c = 0.0
                 active_cal = 0.0
                 tot_cost = 0.0
-                price_map = get_product_price_map()
                 for m in sp_meals:
                     is_active = m.get("notes") == "Активность"
                     for mi in m.get("meal_items", []):
@@ -565,8 +613,6 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
                             pr100 = find_item_price_per_100g(pn, price_map)
                             if pr100 is not None and q > 0:
                                 tot_cost += (q / 100.0) * pr100
-
-                goals = get_user_goals()
 
                 return {
                     "date": target_date,
@@ -595,7 +641,8 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
         """
         row = cursor.execute(query, (target_date,)).fetchone()
 
-        goals = get_user_goals()
+        if goals is None:
+            goals = get_user_goals()
 
         # Calculate active calories (where notes = 'Активность' or similar)
         active_row = cursor.execute("""
@@ -608,7 +655,8 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
 
         # Calculate total cost for local sqlite meals
         tot_cost = 0.0
-        price_map = get_product_price_map()
+        if price_map is None:
+            price_map = get_product_price_map()
         items_today = cursor.execute("""
             SELECT mi.product_name, mi.quantity_g 
             FROM meals m
@@ -633,8 +681,9 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
             "goals": goals
         }
 
-def get_recent_meals(limit: int = 10, target_date: str = None) -> List[Dict[str, Any]]:
-    price_map = get_product_price_map()
+def get_recent_meals(limit: int = 10, target_date: str = None, price_map: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
+    if price_map is None:
+        price_map = get_product_price_map()
     if SUPABASE_URL and SUPABASE_KEY:
         try:
             url = f"meals?select=*,meal_items(*)&order=timestamp.desc&limit={limit}"
@@ -816,6 +865,7 @@ def delete_product(product_name: str) -> bool:
         except Exception as e:
             print(f"Supabase delete product warning: {e}")
 
+    cache_invalidate("product_prices", "product_price_map", "coach_product_verdicts")
     return True
 
 
@@ -895,7 +945,13 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float = 10
         except Exception as e:
             print(f"Supabase price sync warning: {e}")
 
+    cache_invalidate("product_prices", "product_price_map", "coach_product_verdicts")
+
 def _load_coach_product_verdicts() -> Dict[str, Dict[str, Any]]:
+    cached = cache_get("coach_product_verdicts", ttl=60.0)
+    if cached is not None:
+        return cached
+
     verdicts: Dict[str, Dict[str, Any]] = {}
     if SUPABASE_URL and SUPABASE_KEY:
         try:
@@ -934,9 +990,14 @@ def _load_coach_product_verdicts() -> Dict[str, Dict[str, Any]]:
                         verdicts[p_name] = {"score": None, "verdict": r["recommendation"]}
     except Exception:
         pass
+    cache_set("coach_product_verdicts", verdicts)
     return verdicts
 
 def get_product_prices() -> List[Dict[str, Any]]:
+    cached = cache_get("product_prices", ttl=60.0)
+    if cached is not None:
+        return cached
+
     coach_verdicts = _load_coach_product_verdicts()
     if SUPABASE_URL and SUPABASE_KEY:
         try:
@@ -974,6 +1035,7 @@ def get_product_prices() -> List[Dict[str, Any]]:
                     d["efficiency_label"] = label
                     d["badge_class"] = badge_class
                     result.append(d)
+                cache_set("product_prices", result)
                 return result
         except Exception as e:
             print(f"Supabase product prices warning: {e}")
@@ -1015,10 +1077,15 @@ def get_product_prices() -> List[Dict[str, Any]]:
             d["efficiency_label"] = label
             d["badge_class"] = badge_class
             result.append(d)
+        cache_set("product_prices", result)
         return result
 
 def get_product_price_map() -> Dict[str, float]:
-    """Returns mapping of product name to price per 100g in EUR (€)."""
+    """Returns mapping of product name to price per 100g in EUR (€). Cached for 60s."""
+    cached = cache_get("product_price_map", ttl=60.0)
+    if cached is not None:
+        return cached
+
     prices = get_product_prices()
     pm: Dict[str, float] = {}
     for p in prices:
@@ -1026,6 +1093,7 @@ def get_product_price_map() -> Dict[str, float]:
         p100 = float(p.get("price_per_100g") or 0.0)
         if name and p100 > 0:
             pm[name] = p100
+    cache_set("product_price_map", pm)
     return pm
 
 def find_item_price_per_100g(item_name: str, price_map: Optional[Dict[str, float]] = None) -> Optional[float]:
@@ -1038,6 +1106,12 @@ def find_item_price_per_100g(item_name: str, price_map: Optional[Dict[str, float
 
     if n in price_map:
         return price_map[n]
+
+    # Rule: Raw pork / shashlik pork mapping -> matches 'свинина полужирная' or 'свинина'
+    if ("шашлык" in n and "свин" in n) or n == "свинина" or n.startswith("свин"):
+        for p_name, pr in price_map.items():
+            if "свин" in p_name:
+                return pr
 
     for p_name, pr in price_map.items():
         if are_product_duplicates(n, p_name):

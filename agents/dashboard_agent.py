@@ -26,14 +26,18 @@ class DashboardAgent:
             meals = get_recent_meals(limit=10)
             recent_recs = get_recent_recommendations(limit=6)
             coach_tips = [
-                {"severity": r.get("severity", "tip"), "message": r.get("recommendation", "")}
+                {
+                    "topic": r.get("topic") or "Совет тренера",
+                    "severity": r.get("severity", "tip"),
+                    "message": r.get("recommendation", "")
+                }
                 for r in recent_recs
                 if not (r.get("topic", "").startswith("Продукт:") or r.get("topic", "").startswith("Запрос фичи"))
             ]
             if not coach_tips:
                 coach_tips = [
-                    {"severity": "info", "message": "Соблюдайте баланс белков, жиров и углеводов в течение дня."},
-                    {"severity": "tip", "message": "Старайтесь распределить дневную норму белка (160 г) равномерно между 3–4 приемами пищи."}
+                    {"topic": "Баланс рациона", "severity": "info", "message": "Соблюдайте баланс белков, жиров и углеводов в течение дня."},
+                    {"topic": "Норма белка", "severity": "tip", "message": "Старайтесь распределить дневную норму белка равномерно между приемами пищи."}
                 ]
             coach = {"summary": summary, "recommendations": coach_tips[:3]}
             products = get_product_prices()
@@ -53,22 +57,8 @@ class DashboardAgent:
                 "products": products,
                 "history": history_summary,
             }
-
-            content = out_file.read_text(encoding="utf-8")
-            json_str = json.dumps(data, ensure_ascii=False)
-            initial_data_script = f"window.INITIAL_DATA = {json_str};\n"
-
-            if "window.INITIAL_DATA =" in content:
-                content = re.sub(
-                    r'window\.INITIAL_DATA\s*=[\s\S]*?;\n',
-                    initial_data_script,
-                    content,
-                    count=1
-                )
-            else:
-                content = content.replace("<script>\n", f"<script>\n{initial_data_script}", 1)
-
-            out_file.write_text(content, encoding="utf-8")
+            data_file = Path(__file__).resolve().parent.parent / "dashboard" / "data.json"
+            data_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as e:
             print(f"DashboardAgent render error: {e}")
 

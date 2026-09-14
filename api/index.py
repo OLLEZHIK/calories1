@@ -13,21 +13,23 @@ class handler(BaseHTTPRequestHandler):
             query_params = urllib.parse.parse_qs(parsed_path.query)
             target_date = query_params.get('date', [None])[0]
 
-            summary = get_today_summary(target_date)
-            meals = get_recent_meals(limit=10, target_date=target_date)
+            from database.db import get_product_price_map
+            price_map = get_product_price_map()
             products = get_product_prices()
+            summary = get_today_summary(target_date, price_map=price_map)
+            meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map)
 
             # Fast coach recommendations from DB cache without waiting for Gemini LLM
             recent_recs = get_recent_recommendations(limit=6)
             coach_tips = [
-                {"severity": r.get("severity", "tip"), "message": r.get("recommendation", "")}
+                {"topic": r.get("topic") or "Совет тренера", "severity": r.get("severity", "tip"), "message": r.get("recommendation", "")}
                 for r in recent_recs
                 if not (r.get("topic", "").startswith("Продукт:") or r.get("topic", "").startswith("Запрос фичи"))
             ]
             if not coach_tips:
                 coach_tips = [
-                    {"severity": "info", "message": "Соблюдайте баланс белков, жиров и углеводов в течение дня."},
-                    {"severity": "tip", "message": "Пейте достаточное количество чистой воды между приёмами пищи."}
+                    {"topic": "Баланс рациона", "severity": "info", "message": "Соблюдайте баланс белков, жиров и углеводов в течение дня."},
+                    {"topic": "Водный баланс", "severity": "tip", "message": "Пейте достаточное количество чистой воды между приёмами пищи."}
                 ]
             coach = {"summary": summary, "recommendations": coach_tips[:3]}
             
