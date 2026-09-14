@@ -64,6 +64,26 @@ def init_db():
             pass # Column already exists
 
         try:
+            conn.execute("ALTER TABLE user_goals ADD COLUMN goal_mode TEXT DEFAULT 'loss_300'")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS weight_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    weight REAL NOT NULL,
+                    goal_mode TEXT,
+                    notes TEXT
+                )
+            """)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        try:
             conn.execute("ALTER TABLE product_prices ADD COLUMN coach_score INTEGER DEFAULT 0")
             conn.execute("ALTER TABLE product_prices ADD COLUMN coach_verdict TEXT DEFAULT ''")
             conn.commit()
@@ -329,6 +349,186 @@ def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal
 
     return meal_id
 
+def calculate_nutrition_goals(weight_current: float, mode: str = "loss_300", weight_goal: Optional[float] = None) -> Dict[str, Any]:
+    """
+    Scientifically calculates daily calorie and macro (P/F/C) goals based on body weight and goal mode:
+    Modes:
+      - 'loss_200': -200g/week (-220 kcal/day deficit)
+      - 'loss_300': -300g/week (-330 kcal/day deficit)
+      - 'loss_400': -400g/week (-440 kcal/day deficit)
+      - 'gain': muscle hypertrophy / 'качаться' (+250 kcal/day clean surplus, protein 2.1g/kg)
+
+    Strictly satisfies physical energy equation: 4*P + 9*F + 4*C == final_calories!
+    """
+    w = max(30.0, min(300.0, float(weight_current)))
+    valid_modes = ["loss_200", "loss_300", "loss_400", "gain"]
+    if mode not in valid_modes:
+        mode = "loss_300"
+
+    tdee = round(w * 31.5)
+
+    if mode == "loss_200":
+        delta_kcal = -220
+        p_per_kg = 2.0
+        mode_title = "Снижение веса (-200г / неделю)"
+    elif mode == "loss_300":
+        delta_kcal = -330
+        p_per_kg = 2.0
+        mode_title = "Снижение веса (-300г / неделю)"
+    elif mode == "loss_400":
+        delta_kcal = -440
+        p_per_kg = 2.0
+        mode_title = "Снижение веса (-400г / неделю)"
+    elif mode == "gain":
+        delta_kcal = 250
+        p_per_kg = 2.1
+        mode_title = "Набор массы / Качаться (+250 ккал / день)"
+    else:
+        delta_kcal = -330
+        p_per_kg = 2.0
+        mode_title = "Снижение веса (-300г / неделю)"
+
+    target_cal = max(1200, tdee + delta_kcal)
+    p = int(round(w * p_per_kg))
+    f = int(round(w * 0.9))
+    carb_kcal = max(0, target_cal - (4 * p + 9 * f))
+    c = int(round(carb_kcal / 4.0))
+
+    # Re-sync target calories so 4P + 9F + 4C matches exactly
+    final_cal = 4 * p + 9 * f + 4 * c
+
+    return {
+        "calories": final_cal,
+        "protein_g": p,
+        "fat_g": f,
+        "carbs_g": c,
+        "weight_current": round(w, 1),
+        "weight_goal": round(float(weight_goal), 1) if weight_goal else None,
+        "goal_mode": mode,
+        "goal_title": mode_title,
+        "tdee": tdee,
+        "delta_kcal": delta_kcal,
+        "energy_check": f"4×{p} + 9×{f} + 4×{c} = {final_cal} ккал"
+    }
+
+def get_user_goals() -> Dict[str, Any]:
+    """Returns the user's active goals, current weight, and goal mode."""
+    weight_current = 76.0
+    weight_goal = 67.0
+    goal_mode = "loss_300"
+
+    # Try local sqlite first
+    try:
+        with get_connection() as conn:
+            row = conn.execute("SELECT * FROM user_goals ORDER BY id DESC LIMIT 1").fetchone()
+            if row:
+                keys = row.keys()
+                if "weight_current" in keys and row["weight_current"] is not None:
+                    weight_current = float(row["weight_current"])
+                if "weight_goal" in keys and row["weight_goal"] is not None:
+                    weight_goal = float(row["weight_goal"])
+                if "goal_mode" in keys and row["goal_mode"]:
+                    goal_mode = str(row["goal_mode"])
+    except Exception as e:
+        print(f"Local user_goals read error: {e}")
+
+    # Check Supabase if active
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            sp_goals = supabase_request("user_goals?select=*&order=id.desc&limit=1")
+            if sp_goals and isinstance(sp_goals, list) and len(sp_goals) > 0:
+                g = sp_goals[0]
+                if g.get("weight_current") is not None:
+                    weight_current = float(g["weight_current"])
+                if g.get("weight_goal") is not None:
+                    weight_goal = float(g["weight_goal"])
+            sp_mode = supabase_request("bot_sessions?chat_id=eq.goal_mode")
+            if sp_mode and isinstance(sp_mode, list) and len(sp_mode) > 0:
+                m = sp_mode[0].get("mode")
+                if m in ["loss_200", "loss_300", "loss_400", "gain"]:
+                    goal_mode = m
+        except Exception as e:
+            print(f"Supabase user_goals read error: {e}")
+
+    return calculate_nutrition_goals(weight_current, mode=goal_mode, weight_goal=weight_goal)
+
+def save_user_weight_and_goals(weight_current: float, mode: Optional[str] = None, weight_goal: Optional[float] = None) -> Dict[str, Any]:
+    """
+    Saves user weight and calculates/persists corresponding daily calorie and macro goals.
+    Persists to SQLite (user_goals + weight_log) and Supabase Cloud DB.
+    """
+    current_g = get_user_goals()
+    if not mode:
+        mode = current_g.get("goal_mode", "loss_300")
+    if weight_goal is None:
+        weight_goal = current_g.get("weight_goal")
+
+    goals = calculate_nutrition_goals(weight_current, mode=mode, weight_goal=weight_goal)
+
+    # 1. Save to SQLite
+    try:
+        with get_connection() as conn:
+            existing = conn.execute("SELECT id FROM user_goals LIMIT 1").fetchone()
+            if existing:
+                conn.execute("""
+                    UPDATE user_goals SET 
+                        calories = ?, protein_g = ?, fat_g = ?, carbs_g = ?,
+                        weight_current = ?, weight_goal = ?, goal_mode = ?
+                    WHERE id = ?
+                """, (
+                    goals["calories"], goals["protein_g"], goals["fat_g"], goals["carbs_g"],
+                    goals["weight_current"], goals["weight_goal"], goals["goal_mode"], existing["id"]
+                ))
+            else:
+                conn.execute("""
+                    INSERT INTO user_goals (calories, protein_g, fat_g, carbs_g, weight_current, weight_goal, goal_mode)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    goals["calories"], goals["protein_g"], goals["fat_g"], goals["carbs_g"],
+                    goals["weight_current"], goals["weight_goal"], goals["goal_mode"]
+                ))
+
+            conn.execute("""
+                INSERT INTO weight_log (weight, goal_mode, notes)
+                VALUES (?, ?, ?)
+            """, (goals["weight_current"], goals["goal_mode"], f"Target: {goals['calories']} kcal"))
+            conn.commit()
+    except Exception as e:
+        print(f"SQLite save_user_weight_and_goals error: {e}")
+
+    # 2. Save to Supabase
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            supabase_request(
+                "user_goals?id=eq.1",
+                method="PATCH",
+                data={
+                    "calories": goals["calories"],
+                    "protein_g": goals["protein_g"],
+                    "fat_g": goals["fat_g"],
+                    "carbs_g": goals["carbs_g"],
+                    "weight_current": goals["weight_current"],
+                    "weight_goal": goals["weight_goal"],
+                }
+            )
+            supabase_request(
+                "bot_sessions?on_conflict=chat_id",
+                method="POST",
+                data={"chat_id": "goal_mode", "mode": goals["goal_mode"]},
+                prefer="resolution=merge-duplicates,return=representation"
+            )
+        except Exception as e:
+            print(f"Supabase save_user_weight_and_goals error: {e}")
+
+    # Update dashboard HTML
+    try:
+        from agents.dashboard_agent import dashboard_agent
+        dashboard_agent.render()
+    except Exception:
+        pass
+
+    return goals
+
 def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
     if not target_date:
         target_date = date.today().isoformat()
@@ -366,25 +566,7 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
                             if pr100 is not None and q > 0:
                                 tot_cost += (q / 100.0) * pr100
 
-                # Pull real user goals (incl. weight tracking) from Supabase instead of
-                # always returning the hardcoded defaults.
-                goals = dict(DEFAULT_GOALS)
-                goals.setdefault("weight_current", None)
-                goals.setdefault("weight_goal", None)
-                try:
-                    sp_goals = supabase_request("user_goals?select=*&order=id.desc&limit=1")
-                    if sp_goals and isinstance(sp_goals, list) and len(sp_goals) > 0:
-                        g = sp_goals[0]
-                        goals = {
-                            "calories": g.get("calories", DEFAULT_GOALS["calories"]),
-                            "protein_g": g.get("protein_g", DEFAULT_GOALS["protein_g"]),
-                            "fat_g": g.get("fat_g", DEFAULT_GOALS["fat_g"]),
-                            "carbs_g": g.get("carbs_g", DEFAULT_GOALS["carbs_g"]),
-                            "weight_current": g.get("weight_current"),
-                            "weight_goal": g.get("weight_goal"),
-                        }
-                except Exception as e:
-                    print(f"Supabase goals fetch error: {e}")
+                goals = get_user_goals()
 
                 return {
                     "date": target_date,
@@ -413,15 +595,7 @@ def get_today_summary(target_date: Optional[str] = None) -> Dict[str, Any]:
         """
         row = cursor.execute(query, (target_date,)).fetchone()
 
-        goals_row = cursor.execute("SELECT * FROM user_goals ORDER BY id DESC LIMIT 1").fetchone()
-        goals = {
-            "calories": goals_row["calories"] if goals_row else 2200,
-            "protein_g": goals_row["protein_g"] if goals_row else 160,
-            "fat_g": goals_row["fat_g"] if goals_row else 70,
-            "carbs_g": goals_row["carbs_g"] if goals_row else 230,
-            "weight_current": goals_row["weight_current"] if (goals_row and "weight_current" in goals_row.keys()) else 80.0,
-            "weight_goal": goals_row["weight_goal"] if (goals_row and "weight_goal" in goals_row.keys()) else 75.0,
-        }
+        goals = get_user_goals()
 
         # Calculate active calories (where notes = 'Активность' or similar)
         active_row = cursor.execute("""

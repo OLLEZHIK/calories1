@@ -104,11 +104,60 @@ a{color:inherit}
   .panel-body{padding:14px 12px}
 }
 
-/* ---------- weight bar ---------- */
-.weight-wrap{margin-bottom:20px; padding:16px; background:var(--panel); border:1px solid var(--hair); border-radius:4px; box-shadow:var(--shadow);}
-.wb-labels{display:flex; justify-content:space-between; margin-bottom:8px; font-size:14px; font-weight:600;}
-.wb-track{width:100%; height:12px; background:var(--track); border-radius:6px; overflow:hidden;}
-.wb-fill{height:100%; background:var(--p); border-radius:6px; transition:width 0.3s ease;}
+/* ---------- weight & goals control panel ---------- */
+.weight-wrap{
+  margin-bottom:20px; padding:18px 20px; background:var(--panel);
+  border:1px solid var(--hair); border-radius:4px; box-shadow:var(--shadow);
+}
+.wg-header{display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:14px;}
+.wg-title{font-family:Oswald,sans-serif; font-size:16px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink);}
+.wg-sub{font-size:12px; color:var(--ink-3); margin-top:2px;}
+.wg-form{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.wg-input-wrap{
+  display:inline-flex; align-items:center; background:var(--panel-2);
+  border:1px solid var(--hair); border-radius:4px; padding:4px 10px; gap:4px;
+}
+.wg-input-wrap input{
+  background:transparent; border:none; color:var(--ink);
+  font-family:Oswald,sans-serif; font-size:18px; font-weight:600;
+  width:64px; text-align:right; outline:none;
+}
+.wg-input-wrap span{font-size:13px; color:var(--ink-2); font-weight:500;}
+.wg-btn{
+  background:var(--p); color:#fff; border:none; border-radius:4px;
+  padding:7px 14px; font-family:"Golos Text",sans-serif; font-size:13px; font-weight:600;
+  cursor:pointer; transition:opacity 0.2s ease;
+}
+.wg-btn:hover{opacity:0.9;}
+.wg-status{font-size:12px; font-family:"JetBrains Mono",monospace; color:var(--good); display:none;}
+
+.wg-modes{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;}
+.wg-mode-btn{
+  background:var(--panel-2); border:1px solid var(--hair); border-radius:4px;
+  padding:6px 12px; font-size:12px; font-weight:500; color:var(--ink-2);
+  cursor:pointer; transition:all 0.15s ease; display:inline-flex; align-items:center; gap:6px;
+}
+.wg-mode-btn:hover{border-color:var(--ink-3); color:var(--ink);}
+.wg-mode-btn.active{
+  background:color-mix(in srgb, var(--p) 15%, var(--panel));
+  border-color:var(--p); color:var(--p); font-weight:700;
+}
+.wg-mode-btn.active.gain-mode{
+  background:color-mix(in srgb, var(--good) 15%, var(--panel));
+  border-color:var(--good); color:var(--good);
+}
+
+.wg-calc-badge{
+  background:var(--panel-2); border:1px solid var(--hair); border-radius:4px;
+  padding:8px 12px; font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--ink-2);
+  display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;
+  margin-bottom:12px;
+}
+.wg-calc-badge .formula{color:var(--good); font-weight:600;}
+
+.wb-labels{display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px; font-weight:500; color:var(--ink-2);}
+.wb-track{width:100%; height:10px; background:var(--track); border-radius:5px; overflow:hidden;}
+.wb-fill{height:100%; background:var(--p); border-radius:5px; transition:width 0.3s ease;}
 
 /* ---------- calorie dial ---------- */
 .dial-wrap{display:flex; align-items:center; gap:22px; flex-wrap:wrap}
@@ -248,14 +297,45 @@ a{color:inherit}
     <!-- Populated by JS -->
   </div>
 
-  <!-- Weight Bar -->
-  <div class="weight-wrap" id="weight-bar-wrap" style="display:none;">
-    <div class="wb-labels">
-      <span>Текущий вес: <span id="wb-current" style="color:var(--p)">0</span>кг</span>
-      <span>Цель: <span id="wb-goal">0</span>кг</span>
+  <!-- Weight & Goals Control Panel -->
+  <div class="weight-wrap" id="weight-bar-wrap">
+    <div class="wg-header">
+      <div>
+        <div class="wg-title">⚖️ Мой вес и режим цели</div>
+        <div class="wg-sub">Автоматический расчёт целевых калорий и БЖУ с гарантией баланса энергии</div>
+      </div>
+      <div class="wg-form">
+        <div class="wg-input-wrap">
+          <input type="number" id="weight-input" step="0.1" min="30" max="300" value="76.0" oninput="onWeightInput(this.value)">
+          <span>кг</span>
+        </div>
+        <button class="wg-btn" id="btn-save-weight" onclick="saveWeightAndGoals()">Сохранить</button>
+        <span id="weight-save-status" class="wg-status">✓ Сохранено в БД</span>
+      </div>
     </div>
-    <div class="wb-track">
-      <div class="wb-fill" id="wb-fill" style="width: 0%"></div>
+
+    <!-- 4 Goal Modes -->
+    <div class="wg-modes" id="wg-modes-container">
+      <button class="wg-mode-btn" data-mode="loss_200" onclick="selectGoalMode('loss_200')">📉 -200 г/нед (-220 ккал)</button>
+      <button class="wg-mode-btn active" data-mode="loss_300" onclick="selectGoalMode('loss_300')">📉 -300 г/нед (-330 ккал)</button>
+      <button class="wg-mode-btn" data-mode="loss_400" onclick="selectGoalMode('loss_400')">📉 -400 г/нед (-440 ккал)</button>
+      <button class="wg-mode-btn gain-mode" data-mode="gain" onclick="selectGoalMode('gain')">💪 Набор веса (качаться, +250 ккал)</button>
+    </div>
+
+    <!-- Live Calculation Badge -->
+    <div class="wg-calc-badge" id="wg-calc-badge">
+      <span id="wg-calc-text">TDEE: 2394 ккал (-330 ккал) | Цель: 2064 ккал (Б: 152г, Ж: 68г, У: 211г)</span>
+      <span class="formula" id="wg-calc-check">4×152 + 9×68 + 4×211 = 2064 ккал ✓</span>
+    </div>
+
+    <div id="wb-progress-section" style="display:none;">
+      <div class="wb-labels">
+        <span>Текущий: <strong id="wb-current" style="color:var(--p)">76.0</strong> кг</span>
+        <span>Целевой вес: <strong id="wb-goal">67.0</strong> кг</span>
+      </div>
+      <div class="wb-track">
+        <div class="wb-fill" id="wb-fill" style="width: 0%"></div>
+      </div>
     </div>
   </div>
 
@@ -418,8 +498,164 @@ a{color:inherit}
 </div>
 
 <script>
-window.INITIAL_DATA = {"status": "success", "summary": {"date": "2026-09-13", "total_calories": 1572.0, "total_protein": 59.0, "total_fat": 74.0, "total_carbs": 172.0, "active_calories": 0, "total_cost_eur": 3.61, "goals": {"calories": 2200, "protein_g": 160, "fat_g": 70, "carbs_g": 230, "weight_current": null, "weight_goal": null}}, "meals": [{"id": 22, "timestamp": "2026-09-13 13:18", "raw_input": "На обед я ел 50 грамм гречки, 50 грамм риса и одно яйцо. Также запиши в перекусы 150 грамм торта медовик.", "input_type": "voice", "meal_type": "Перекус", "items": [{"id": 49, "fat_g": 41, "carbs_g": 64, "meal_id": 22, "calories": 664, "category": "custom", "protein_g": 10, "quantity_g": 150, "product_name": "торт медовик", "price_per_100g": 0.94, "cost_eur": 1.41}], "total_calories": 664, "total_protein": 10, "total_fat": 41, "total_carbs": 64, "total_cost_eur": 1.41}, {"id": 21, "timestamp": "2026-09-13 13:18", "raw_input": "На обед я ел 50 грамм гречки, 50 грамм риса и одно яйцо. Также запиши в перекусы 150 грамм торта медовик.", "input_type": "voice", "meal_type": "Обед", "items": [{"id": 46, "fat_g": 2, "carbs_g": 36, "meal_id": 21, "calories": 172, "category": "grains", "protein_g": 6, "quantity_g": 50, "product_name": "гречка", "price_per_100g": 0.5, "cost_eur": 0.25}, {"id": 47, "fat_g": 0, "carbs_g": 14, "meal_id": 21, "calories": 65, "category": "grains", "protein_g": 1, "quantity_g": 50, "product_name": "рис", "price_per_100g": 0.17, "cost_eur": 0.09}, {"id": 48, "fat_g": 6, "carbs_g": 1, "meal_id": 21, "calories": 85, "category": "eggs_dairy", "protein_g": 7, "quantity_g": 55, "product_name": "куриное яйцо", "price_per_100g": 0.33, "cost_eur": 0.18}], "total_calories": 322, "total_protein": 14, "total_fat": 8, "total_carbs": 51, "total_cost_eur": 0.52}, {"id": 20, "timestamp": "2026-09-13 13:16", "raw_input": "На завтрак я сегодня ел три жареных яйца, три куриных крыла, половинки крыла, и примерно 50 грамм гречки.", "input_type": "voice", "meal_type": "Завтрак", "items": [{"id": 43, "fat_g": 18, "carbs_g": 2, "meal_id": 20, "calories": 256, "category": "eggs_dairy", "protein_g": 21, "quantity_g": 165, "product_name": "куриное яйцо", "price_per_100g": 0.33, "cost_eur": 0.54}, {"id": 44, "fat_g": 5, "carbs_g": 19, "meal_id": 20, "calories": 158, "category": "general", "protein_g": 8, "quantity_g": 105, "product_name": "куриное крыло", "price_per_100g": 0.85, "cost_eur": 0.89}, {"id": 45, "fat_g": 2, "carbs_g": 36, "meal_id": 20, "calories": 172, "category": "grains", "protein_g": 6, "quantity_g": 50, "product_name": "гречка", "price_per_100g": 0.5, "cost_eur": 0.25}], "total_calories": 586, "total_protein": 35, "total_fat": 25, "total_carbs": 57, "total_cost_eur": 1.68}], "coach": {"summary": {"date": "2026-09-13", "total_calories": 1572.0, "total_protein": 59.0, "total_fat": 74.0, "total_carbs": 172.0, "active_calories": 0, "total_cost_eur": 3.61, "goals": {"calories": 2200, "protein_g": 160, "fat_g": 70, "carbs_g": 230, "weight_current": null, "weight_goal": null}}, "recommendations": [{"severity": "info", "message": "Добавьте в каждый прием пищи свежие овощи и зелень — клетчатка поможет быстрее насытиться без лишней калорийности."}, {"severity": "tip", "message": "Замените майонез и сливочное масло на греческий йогурт, соус на основе нежирного творога или лимонный сок со специями."}, {"severity": "warning", "message": "Вы превысили дневную норму калорий на 1215 ккал, главным образом за счет жиров (162 г при норме 70 г). Ограничьте десерты, майонез и сливочное масло."}]}, "products": [{"id": 29, "product_name": "гречка", "category": "grains", "price_rub": 2.5, "weight_g": 500, "protein_per_100g": 13, "fat_per_100g": 3, "carbs_per_100g": 64, "calories_per_100g": 343, "updated_at": "2026-09-13T13:13:36.505973", "price_per_100g": 0.5, "currency": "€", "efficiency_score": 4.8, "coach_score": 8, "coach_verdict": "Отличный источник сложных углеводов, клетчатки и растительного белка с низким гликемическим индексом. Обеспечивает долгое насыщение и стабильный уровень энергии без скачков сахара.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 32, "product_name": "куриная грудка", "category": "general", "price_rub": 8.5, "weight_g": 1000, "protein_per_100g": 31, "fat_per_100g": 4, "carbs_per_100g": 0, "calories_per_100g": 156, "updated_at": "2026-09-13T13:15:19.038936", "price_per_100g": 0.85, "currency": "€", "efficiency_score": 10.0, "coach_score": 10, "coach_verdict": "Идеальный источник высококачественного белка с минимальным содержанием жира и нулевым количеством углеводов. Лучший выбор для роста мышц и эффективного жиросжигания.", "efficiency_label": "Высокий", "badge_class": "good"}, {"id": 34, "product_name": "масло растительное", "category": "fats_oils", "price_rub": 2, "weight_g": 100, "protein_per_100g": 0, "fat_per_100g": 100, "carbs_per_100g": 0, "calories_per_100g": 899, "updated_at": "2026-09-13T13:21:35.876437", "price_per_100g": 2.0, "currency": "€", "efficiency_score": 3.0, "coach_score": 3, "coach_verdict": "Чистый жир с максимальной калорийностью. При сильном нагревании масло теряет пользу и образует продукты окисления, поэтому контролируйте его количество с помощью распылителя.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 30, "product_name": "помидоры", "category": "vegetables", "price_rub": 1.5, "weight_g": 1000, "protein_per_100g": 1, "fat_per_100g": 0, "carbs_per_100g": 4, "calories_per_100g": 18, "updated_at": "2026-09-13T13:14:08.627153", "price_per_100g": 0.15, "currency": "€", "efficiency_score": 5.4, "coach_score": 9, "coach_verdict": "Низкокалорийный продукт с высоким содержанием клетчатки, витаминов и антиоксидантов. Отличный выбор для добавления объема рациону при контроле веса.", "efficiency_label": "Средний", "badge_class": "warn"}, {"id": 31, "product_name": "рис белый", "category": "grains", "price_rub": 0.7, "weight_g": 400, "protein_per_100g": 7, "fat_per_100g": 1, "carbs_per_100g": 78, "calories_per_100g": 355, "updated_at": "2026-09-13T13:15:04.488979", "price_per_100g": 0.17, "currency": "€", "efficiency_score": 3.9, "coach_score": 6, "coach_verdict": "Хороший источник сложных углеводов для восполнения энергии до и после тренировок. При похудении важно контролировать порцию из-за высокой калорийности и очищенной структуры зерна.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 33, "product_name": "сахар", "category": "sweets", "price_rub": 0.7, "weight_g": 1000, "protein_per_100g": 0, "fat_per_100g": 0, "carbs_per_100g": 100, "calories_per_100g": 387, "updated_at": "2026-09-13T13:20:18.486003", "price_per_100g": 0.07, "currency": "€", "efficiency_score": 3.0, "coach_score": 1, "coach_verdict": "Простые углеводы и пустые калории с высоким гликемическим индексом. Провоцирует скачки инсулина и отложение жира, рекомендуется максимально ограничить.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 35, "product_name": "творог 5%", "category": "general", "price_rub": 1.5, "weight_g": 200, "protein_per_100g": 18, "fat_per_100g": 5, "carbs_per_100g": 3, "calories_per_100g": 130, "updated_at": "2026-09-13T13:36:07.18917", "price_per_100g": 0.75, "currency": "€", "efficiency_score": 9.6, "coach_score": 9, "coach_verdict": "Отличный медленный белок (казеин) и полезные молочные жиры. Прекрасно насыщает и подходит для перекуса или ужина.", "efficiency_label": "Высокий", "badge_class": "good"}, {"id": 21, "product_name": "торт медовик", "category": "sweets", "price_rub": 7.5, "weight_g": 800, "protein_per_100g": 6, "fat_per_100g": 28, "carbs_per_100g": 43, "calories_per_100g": 443, "updated_at": "2026-09-13T12:55:53.724098", "price_per_100g": 0.94, "currency": "€", "efficiency_score": 3.7, "coach_score": 2, "coach_verdict": "Высококалорийный десерт с высоким содержанием насыщенных жиров и быстрых углеводов при низкой доле белка. Сильно повышает суточную калорийность и не способствует фитнес-целям.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 23, "product_name": "яйца куриные", "category": "general", "price_rub": 0.2, "weight_g": 60, "protein_per_100g": 13, "fat_per_100g": 11, "carbs_per_100g": 1, "calories_per_100g": 155, "updated_at": "2026-09-13T13:03:37.475297", "price_per_100g": 0.33, "currency": "€", "efficiency_score": 7.0, "coach_score": 9, "coach_verdict": "Эталонный источник высококачественного белка с идеальным аминокислотным составом и здоровыми жирами.", "efficiency_label": "Средний", "badge_class": "warn"}], "history": {"2026-09-13": 1572}};
+window.INITIAL_DATA = {"status": "success", "summary": {"date": "2026-09-14", "total_calories": 1407.0, "total_protein": 76.0, "total_fat": 78.0, "total_carbs": 102.0, "active_calories": 0, "total_cost_eur": 1.78, "goals": {"calories": 2681, "protein_g": 162, "fat_g": 69, "carbs_g": 353, "weight_current": 77.2, "weight_goal": 67.0, "goal_mode": "gain", "goal_title": "Набор массы / Качаться (+250 ккал / день)", "tdee": 2432, "delta_kcal": 250, "energy_check": "4×162 + 9×69 + 4×353 = 2681 ккал"}}, "meals": [{"id": 32, "timestamp": "2026-09-14 11:18", "raw_input": "Смотри, на обед я поел, наверное, грамм 100 макарон и грамм 80 куриного фарша, грамм 80 свиного фарша. Также выпил одно кофе с молоком, там было примерно 60 калорий.", "input_type": "voice", "meal_type": "Обед", "items": [{"id": 71, "fat_g": 1, "carbs_g": 25, "meal_id": 32, "calories": 131, "category": "grains", "protein_g": 5, "quantity_g": 100, "product_name": "макароны", "price_per_100g": null, "cost_eur": 0.0}, {"id": 72, "fat_g": 10, "carbs_g": 14, "meal_id": 32, "calories": 202, "category": "openfoodfacts", "protein_g": 14, "quantity_g": 80, "product_name": "куриный фарш", "price_per_100g": 0.85, "cost_eur": 0.68}, {"id": 73, "fat_g": 17, "carbs_g": 0, "meal_id": 32, "calories": 212, "category": "openfoodfacts", "protein_g": 14, "quantity_g": 80, "product_name": "свиной фарш", "price_per_100g": null, "cost_eur": 0.0}, {"id": 74, "fat_g": 6, "carbs_g": 10, "meal_id": 32, "calories": 118, "category": "eggs_dairy", "protein_g": 6, "quantity_g": 200, "product_name": "кофе с молоком", "price_per_100g": null, "cost_eur": 0.0}], "total_calories": 663, "total_protein": 39, "total_fat": 34, "total_carbs": 49, "total_cost_eur": 0.68}, {"id": 31, "timestamp": "2026-09-14 06:04", "raw_input": "На завтрак я съел 3 яйца, 30 грамм майонеза, 70 грамм гречки и 25 грамм свинины.", "input_type": "voice", "meal_type": "Завтрак", "items": [{"id": 67, "fat_g": 18, "carbs_g": 2, "meal_id": 31, "calories": 256, "category": "eggs_dairy", "protein_g": 21, "quantity_g": 165, "product_name": "куриное яйцо", "price_per_100g": 0.33, "cost_eur": 0.54}, {"id": 68, "fat_g": 20, "carbs_g": 1, "meal_id": 31, "calories": 188, "category": "fats_oils", "protein_g": 0, "quantity_g": 30, "product_name": "майонез", "price_per_100g": 0.38, "cost_eur": 0.11}, {"id": 69, "fat_g": 2, "carbs_g": 50, "meal_id": 31, "calories": 240, "category": "grains", "protein_g": 9, "quantity_g": 70, "product_name": "гречка", "price_per_100g": 0.5, "cost_eur": 0.35}, {"id": 70, "fat_g": 4, "carbs_g": 0, "meal_id": 31, "calories": 60, "category": "meat", "protein_g": 7, "quantity_g": 25, "product_name": "свинина", "price_per_100g": 0.35, "cost_eur": 0.09}], "total_calories": 744, "total_protein": 37, "total_fat": 44, "total_carbs": 53, "total_cost_eur": 1.09}, {"id": 30, "timestamp": "2026-09-13 18:56", "raw_input": "А, на ужин 50 г макарон, 25 г фарш свиной, 25 г фарш куриный.", "input_type": "voice", "meal_type": "Ужин", "items": [{"id": 64, "fat_g": 1, "carbs_g": 12, "meal_id": 30, "calories": 66, "category": "grains", "protein_g": 2, "quantity_g": 50, "product_name": "макароны", "price_per_100g": null, "cost_eur": 0.0}, {"id": 65, "fat_g": 1, "carbs_g": 4, "meal_id": 30, "calories": 38, "category": "general", "protein_g": 2, "quantity_g": 25, "product_name": "фарш свиной", "price_per_100g": null, "cost_eur": 0.0}, {"id": 66, "fat_g": 3, "carbs_g": 4, "meal_id": 30, "calories": 59, "category": "openfoodfacts", "protein_g": 4, "quantity_g": 25, "product_name": "фарш куриный", "price_per_100g": 0.85, "cost_eur": 0.21}], "total_calories": 163, "total_protein": 8, "total_fat": 5, "total_carbs": 20, "total_cost_eur": 0.21}, {"id": 28, "timestamp": "2026-09-13 15:27", "raw_input": "Добавь перекус один банан.", "input_type": "voice", "meal_type": "Перекус", "items": [{"id": 60, "fat_g": 0, "carbs_g": 27, "meal_id": 28, "calories": 107, "category": "fruit", "protein_g": 1, "quantity_g": 120, "product_name": "банан", "price_per_100g": 0.15, "cost_eur": 0.18}], "total_calories": 107, "total_protein": 1, "total_fat": 0, "total_carbs": 27, "total_cost_eur": 0.18}, {"id": 27, "timestamp": "2026-09-13 13:53", "raw_input": "40 грамм сахара добавь в перекус.", "input_type": "voice", "meal_type": "Перекус", "items": [{"id": 59, "fat_g": 0, "carbs_g": 40, "meal_id": 27, "calories": 159, "category": "custom", "protein_g": 0, "quantity_g": 40, "product_name": "сахар", "price_per_100g": 0.12, "cost_eur": 0.05}], "total_calories": 159, "total_protein": 0, "total_fat": 0, "total_carbs": 40, "total_cost_eur": 0.05}, {"id": 26, "timestamp": "2026-09-13 13:51", "raw_input": "Добавь к обеду 50 г шашлыка свиного. Это была свиная шея. Посмотри, сколько там должно быть э-э калорийности и всего.", "input_type": "voice", "meal_type": "Обед", "items": [{"id": 58, "fat_g": 2, "carbs_g": 9, "meal_id": 26, "calories": 75, "category": "general", "protein_g": 4, "quantity_g": 50, "product_name": "шашлык из свиной шеи", "price_per_100g": null, "cost_eur": 0.0}], "total_calories": 75, "total_protein": 4, "total_fat": 2, "total_carbs": 9, "total_cost_eur": 0.0}, {"id": 22, "timestamp": "2026-09-13 13:18", "raw_input": "На обед я ел 50 грамм гречки, 50 грамм риса и одно яйцо. Также запиши в перекусы 150 грамм торта медовик.", "input_type": "voice", "meal_type": "Перекус", "items": [{"id": 49, "fat_g": 41, "carbs_g": 64, "meal_id": 22, "calories": 664, "category": "custom", "protein_g": 10, "quantity_g": 150, "product_name": "торт медовик", "price_per_100g": 0.94, "cost_eur": 1.41}], "total_calories": 664, "total_protein": 10, "total_fat": 41, "total_carbs": 64, "total_cost_eur": 1.41}, {"id": 21, "timestamp": "2026-09-13 13:18", "raw_input": "На обед я ел 50 грамм гречки, 50 грамм риса и одно яйцо. Также запиши в перекусы 150 грамм торта медовик.", "input_type": "voice", "meal_type": "Обед", "items": [{"id": 46, "fat_g": 2, "carbs_g": 36, "meal_id": 21, "calories": 172, "category": "grains", "protein_g": 6, "quantity_g": 50, "product_name": "гречка", "price_per_100g": 0.5, "cost_eur": 0.25}, {"id": 47, "fat_g": 0, "carbs_g": 14, "meal_id": 21, "calories": 65, "category": "grains", "protein_g": 1, "quantity_g": 50, "product_name": "рис", "price_per_100g": 0.17, "cost_eur": 0.09}, {"id": 48, "fat_g": 6, "carbs_g": 1, "meal_id": 21, "calories": 85, "category": "eggs_dairy", "protein_g": 7, "quantity_g": 55, "product_name": "куриное яйцо", "price_per_100g": 0.33, "cost_eur": 0.18}], "total_calories": 322, "total_protein": 14, "total_fat": 8, "total_carbs": 51, "total_cost_eur": 0.52}, {"id": 20, "timestamp": "2026-09-13 13:16", "raw_input": "На завтрак я сегодня ел три жареных яйца, три куриных крыла, половинки крыла, и примерно 50 грамм гречки.", "input_type": "voice", "meal_type": "Завтрак", "items": [{"id": 43, "fat_g": 18, "carbs_g": 2, "meal_id": 20, "calories": 256, "category": "eggs_dairy", "protein_g": 21, "quantity_g": 165, "product_name": "куриное яйцо", "price_per_100g": 0.33, "cost_eur": 0.54}, {"id": 44, "fat_g": 5, "carbs_g": 19, "meal_id": 20, "calories": 158, "category": "general", "protein_g": 8, "quantity_g": 105, "product_name": "куриное крыло", "price_per_100g": 0.85, "cost_eur": 0.89}, {"id": 45, "fat_g": 2, "carbs_g": 36, "meal_id": 20, "calories": 172, "category": "grains", "protein_g": 6, "quantity_g": 50, "product_name": "гречка", "price_per_100g": 0.5, "cost_eur": 0.25}], "total_calories": 586, "total_protein": 35, "total_fat": 25, "total_carbs": 57, "total_cost_eur": 1.68}], "coach": {"summary": {"date": "2026-09-14", "total_calories": 1407.0, "total_protein": 76.0, "total_fat": 78.0, "total_carbs": 102.0, "active_calories": 0, "total_cost_eur": 1.78, "goals": {"calories": 2681, "protein_g": 162, "fat_g": 69, "carbs_g": 353, "weight_current": 77.2, "weight_goal": 67.0, "goal_mode": "gain", "goal_title": "Набор массы / Качаться (+250 ккал / день)", "tdee": 2432, "delta_kcal": 250, "energy_check": "4×162 + 9×69 + 4×353 = 2681 ккал"}}, "recommendations": [{"severity": "info", "message": "Калории и белки превышены, а углеводы недобраны. Замените часть жиров на сложные углеводы (крупы, овощи)."}, {"severity": "tip", "message": "В рационе совсем нет овощей и зелени. Добавляйте клетчатку к белковым приемам пищи для нормализации пищеварения."}, {"severity": "warning", "message": "Значительный перебор по жирам (166 г при норме 69 г). Сократите количество майонеза, сливочного масла и жирных соусов."}]}, "products": [{"id": 39, "product_name": "банан", "category": "fruit", "price_rub": 1.5, "weight_g": 1000, "protein_per_100g": 1, "fat_per_100g": 0, "carbs_per_100g": 23, "calories_per_100g": 89, "updated_at": "2026-09-13T15:35:06.629398", "price_per_100g": 0.15, "currency": "€", "efficiency_score": 3.6, "coach_score": 7, "coach_verdict": "Отличный натуральный источник углеводов и калия для закрытия углеводного окна или энергии перед тренировкой. При похудении употребляйте умеренно из-за высокого содержания фруктозы.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 29, "product_name": "гречка", "category": "grains", "price_rub": 2.5, "weight_g": 500, "protein_per_100g": 13, "fat_per_100g": 3, "carbs_per_100g": 64, "calories_per_100g": 343, "updated_at": "2026-09-13T13:13:36.505973", "price_per_100g": 0.5, "currency": "€", "efficiency_score": 4.8, "coach_score": 8, "coach_verdict": "Отличный источник сложных углеводов, клетчатки и растительного белка с низким гликемическим индексом. Обеспечивает долгое насыщение и стабильный уровень энергии без скачков сахара.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 32, "product_name": "куриная грудка", "category": "general", "price_rub": 8.5, "weight_g": 1000, "protein_per_100g": 31, "fat_per_100g": 4, "carbs_per_100g": 0, "calories_per_100g": 156, "updated_at": "2026-09-13T13:15:19.038936", "price_per_100g": 0.85, "currency": "€", "efficiency_score": 10.0, "coach_score": 10, "coach_verdict": "Эталонный диетический продукт с высоким содержанием полноценного белка и минимальным количеством жира. Идеальный выбор для набора мышечной массы и снижения веса.", "efficiency_label": "Высокий", "badge_class": "good"}, {"id": 40, "product_name": "майонез", "category": "fats_oils", "price_rub": 1.5, "weight_g": 400, "protein_per_100g": 1, "fat_per_100g": 72, "carbs_per_100g": 3, "calories_per_100g": 664, "updated_at": "2026-09-13T18:59:52.409381", "price_per_100g": 0.38, "currency": "€", "efficiency_score": 3.1, "coach_score": 2, "coach_verdict": "Чрезвычайно калорийный соус с огромной концентрацией жиров и почти нулевой белкой ценностью. Использование майонеза легко приводит к перебору по калориям, лучше заменить его греческим йогуртом с зеленью.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 34, "product_name": "масло растительное", "category": "fats_oils", "price_rub": 2, "weight_g": 100, "protein_per_100g": 0, "fat_per_100g": 100, "carbs_per_100g": 0, "calories_per_100g": 899, "updated_at": "2026-09-13T13:21:35.876437", "price_per_100g": 2.0, "currency": "€", "efficiency_score": 3.0, "coach_score": 3, "coach_verdict": "Чистый жир с максимальной калорийностью. При сильном нагревании масло теряет пользу и образует продукты окисления, поэтому контролируйте его количество с помощью распылителя.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 30, "product_name": "помидоры", "category": "vegetables", "price_rub": 1.5, "weight_g": 1000, "protein_per_100g": 1, "fat_per_100g": 0, "carbs_per_100g": 4, "calories_per_100g": 18, "updated_at": "2026-09-13T13:14:08.627153", "price_per_100g": 0.15, "currency": "€", "efficiency_score": 5.4, "coach_score": 9, "coach_verdict": "Низкокалорийный продукт с высоким содержанием клетчатки, витаминов и антиоксидантов. Отличный выбор для добавления объема рациону при контроле веса.", "efficiency_label": "Средний", "badge_class": "warn"}, {"id": 31, "product_name": "рис белый", "category": "grains", "price_rub": 0.7, "weight_g": 400, "protein_per_100g": 7, "fat_per_100g": 1, "carbs_per_100g": 78, "calories_per_100g": 355, "updated_at": "2026-09-13T13:15:04.488979", "price_per_100g": 0.17, "currency": "€", "efficiency_score": 3.9, "coach_score": 6, "coach_verdict": "Хороший источник сложных углеводов для восполнения энергии до и после тренировок. При похудении важно контролировать порцию из-за высокой калорийности и очищенной структуры зерна.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 33, "product_name": "сахар", "category": "sweets", "price_rub": 0.05, "weight_g": 40, "protein_per_100g": 0, "fat_per_100g": 0, "carbs_per_100g": 100, "calories_per_100g": 398, "updated_at": "2026-09-13T13:20:18.486003", "price_per_100g": 0.12, "currency": "€", "efficiency_score": 3.0, "coach_score": 1, "coach_verdict": "Чистый простой углевод с высоким гликемическим индексом. Провоцирует резкие скачки инсулина, не дает насыщения и добавляет пустые калории.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 37, "product_name": "свинина полужирная", "category": "meat", "price_rub": 3.5, "weight_g": 1000, "protein_per_100g": 16, "fat_per_100g": 22, "carbs_per_100g": 0, "calories_per_100g": 258, "updated_at": "2026-09-13T13:51:52.580319", "price_per_100g": 0.35, "currency": "€", "efficiency_score": 6.1, "coach_score": 5, "coach_verdict": "Хороший источник полноценного белка, но из-за умеренной жирности калорийность довольно высока. Подходит для набора массы или поддержки, но при похудении порции стоит контролировать.", "efficiency_label": "Средний", "badge_class": "warn"}, {"id": 35, "product_name": "творог 5%", "category": "general", "price_rub": 1.5, "weight_g": 200, "protein_per_100g": 18, "fat_per_100g": 5, "carbs_per_100g": 3, "calories_per_100g": 130, "updated_at": "2026-09-13T13:36:07.18917", "price_per_100g": 0.75, "currency": "€", "efficiency_score": 9.6, "coach_score": 9, "coach_verdict": "Отличный медленный белок (казеин) и полезные молочные жиры. Прекрасно насыщает и подходит для перекуса или ужина.", "efficiency_label": "Высокий", "badge_class": "good"}, {"id": 21, "product_name": "торт медовик", "category": "sweets", "price_rub": 7.5, "weight_g": 800, "protein_per_100g": 6, "fat_per_100g": 28, "carbs_per_100g": 43, "calories_per_100g": 443, "updated_at": "2026-09-13T12:55:53.724098", "price_per_100g": 0.94, "currency": "€", "efficiency_score": 3.7, "coach_score": 2, "coach_verdict": "Высококалорийный десерт с высоким содержанием насыщенных жиров и быстрых углеводов при низкой доле белка. Сильно повышает суточную калорийность и не способствует фитнес-целям.", "efficiency_label": "Низкий", "badge_class": "crit"}, {"id": 23, "product_name": "яйца куриные", "category": "general", "price_rub": 0.2, "weight_g": 60, "protein_per_100g": 13, "fat_per_100g": 11, "carbs_per_100g": 1, "calories_per_100g": 155, "updated_at": "2026-09-13T13:03:37.475297", "price_per_100g": 0.33, "currency": "€", "efficiency_score": 7.0, "coach_score": 9, "coach_verdict": "Эталонный источник высококачественного белка с идеальным аминокислотным составом и здоровыми жирами.", "efficiency_label": "Средний", "badge_class": "warn"}], "history": {"2026-09-14": 1407, "2026-09-13": 2076}};
 let currentDate = new Date().toISOString().split('T')[0];
+let currentWeight = 76.0;
+let currentGoalMode = 'loss_300';
+let currentWeightGoal = 67.0;
+
+function calcClientGoals(w, mode, wGoal) {
+  w = Math.max(30, Math.min(300, parseFloat(w) || 76.0));
+  const tdee = Math.round(w * 31.5);
+  let delta = -330;
+  let pKg = 2.0;
+  let title = 'Снижение веса (-300г / неделю)';
+
+  if (mode === 'loss_200') { delta = -220; pKg = 2.0; title = 'Снижение веса (-200г / неделю)'; }
+  else if (mode === 'loss_300') { delta = -330; pKg = 2.0; title = 'Снижение веса (-300г / неделю)'; }
+  else if (mode === 'loss_400') { delta = -440; pKg = 2.0; title = 'Снижение веса (-400г / неделю)'; }
+  else if (mode === 'gain') { delta = 250; pKg = 2.1; title = 'Набор массы / Качаться (+250 ккал / день)'; }
+
+  const targetCal = Math.max(1200, tdee + delta);
+  const p = Math.round(w * pKg);
+  const f = Math.round(w * 0.9);
+  const c = Math.max(0, Math.round((targetCal - (4 * p + 9 * f)) / 4.0));
+  const finalCal = 4 * p + 9 * f + 4 * c;
+
+  return {
+    calories: finalCal,
+    protein_g: p,
+    fat_g: f,
+    carbs_g: c,
+    weight_current: w,
+    weight_goal: wGoal || null,
+    goal_mode: mode,
+    goal_title: title,
+    tdee: tdee,
+    delta_kcal: delta,
+    energy_check: `4×${p} + 9×${f} + 4×${c} = ${finalCal} ккал ✓`
+  };
+}
+
+function updateGoalsUI(goals) {
+  if (!goals) return;
+  currentWeight = goals.weight_current || currentWeight;
+  currentGoalMode = goals.goal_mode || currentGoalMode;
+  currentWeightGoal = goals.weight_goal || currentWeightGoal;
+
+  const wInput = document.getElementById('weight-input');
+  if (wInput && document.activeElement !== wInput) {
+    wInput.value = currentWeight;
+  }
+
+  // Update mode buttons
+  document.querySelectorAll('.wg-mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === currentGoalMode);
+  });
+
+  // Update badge
+  const calcText = document.getElementById('wg-calc-text');
+  const calcCheck = document.getElementById('wg-calc-check');
+  if (calcText) {
+    const dSign = goals.delta_kcal >= 0 ? `+${goals.delta_kcal}` : `${goals.delta_kcal}`;
+    calcText.innerText = `TDEE: ${goals.tdee || Math.round(currentWeight * 31.5)} ккал (${dSign} ккал) | Цель: ${goals.calories} ккал (Б: ${goals.protein_g}г, Ж: ${goals.fat_g}г, У: ${goals.carbs_g}г)`;
+  }
+  if (calcCheck) {
+    calcCheck.innerText = `4×${goals.protein_g} + 9×${goals.fat_g} + 4×${goals.carbs_g} = ${goals.calories} ккал ✓`;
+  }
+
+  // Update Dial and Macro targets
+  document.getElementById('dial-target').innerText = goals.calories;
+  document.getElementById('macro-p-target').innerText = `цель ${goals.protein_g}g`;
+  document.getElementById('macro-f-target').innerText = `цель ${goals.fat_g}g`;
+  document.getElementById('macro-c-target').innerText = `цель ${goals.carbs_g}g`;
+
+  // Update Weight Bar if goal exists
+  const progSec = document.getElementById('wb-progress-section');
+  if (currentWeight && currentWeightGoal) {
+    if (progSec) progSec.style.display = 'block';
+    const curEl = document.getElementById('wb-current');
+    const goalEl = document.getElementById('wb-goal');
+    if (curEl) curEl.innerText = currentWeight;
+    if (goalEl) goalEl.innerText = currentWeightGoal;
+    let diff = Math.abs(currentWeight - currentWeightGoal);
+    let progress = Math.max(0, Math.min(1, 1 - (diff / 10.0)));
+    const fillEl = document.getElementById('wb-fill');
+    if (fillEl) {
+      fillEl.style.width = (progress * 100) + '%';
+      fillEl.style.background = (diff === 0) ? 'var(--good)' : 'var(--p)';
+    }
+  } else if (progSec) {
+    progSec.style.display = 'none';
+  }
+}
+
+function onWeightInput(val) {
+  const w = parseFloat(val);
+  if (!w || w < 30 || w > 300) return;
+  const previewGoals = calcClientGoals(w, currentGoalMode, currentWeightGoal);
+  updateGoalsUI(previewGoals);
+}
+
+function selectGoalMode(mode) {
+  currentGoalMode = mode;
+  const w = parseFloat(document.getElementById('weight-input').value) || currentWeight;
+  const previewGoals = calcClientGoals(w, currentGoalMode, currentWeightGoal);
+  updateGoalsUI(previewGoals);
+  saveWeightAndGoals();
+}
+
+async function saveWeightAndGoals() {
+  const wVal = parseFloat(document.getElementById('weight-input').value);
+  if (!wVal || wVal < 30 || wVal > 300) {
+    alert('Пожалуйста, введите корректный вес от 30 до 300 кг');
+    return;
+  }
+  currentWeight = wVal;
+  const calculated = calcClientGoals(currentWeight, currentGoalMode, currentWeightGoal);
+  updateGoalsUI(calculated);
+
+  const statusEl = document.getElementById('weight-save-status');
+  if (statusEl) {
+    statusEl.style.display = 'inline';
+    statusEl.innerText = '⏳ Сохранение...';
+    statusEl.style.color = 'var(--warn)';
+  }
+
+  try {
+    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
+    const res = await fetch(`${apiBase}/api/goals`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        weight_current: currentWeight,
+        goal_mode: currentGoalMode,
+        weight_goal: currentWeightGoal
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.goals) {
+        updateGoalsUI(data.goals);
+        if (data.summary) updateUI({ summary: data.summary, ...data });
+      }
+      if (statusEl) {
+        statusEl.innerText = '✓ Сохранено в БД';
+        statusEl.style.color = 'var(--good)';
+        setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+      }
+    } else {
+      throw new Error('Server returned ' + res.status);
+    }
+  } catch(e) {
+    console.warn('Goals save notice:', e);
+    if (statusEl) {
+      statusEl.innerText = '✓ Сохранено локально';
+      statusEl.style.color = 'var(--ink-2)';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+    }
+  }
+}
 
 async function loadLiveDashboard(dateParam = null) {
   if (dateParam) currentDate = dateParam;
@@ -501,24 +737,8 @@ function updateUI(data) {
 
   document.getElementById('day-date').innerText = currentDate;
 
-  // Update Weight Bar
-  if (goals.weight_current && goals.weight_goal) {
-    document.getElementById('weight-bar-wrap').style.display = 'block';
-    document.getElementById('wb-current').innerText = goals.weight_current;
-    document.getElementById('wb-goal').innerText = goals.weight_goal;
-    
-    let diff = Math.abs(goals.weight_current - goals.weight_goal);
-    // For visual proportion, let's just assume starting distance was e.g. 10kg
-    // Or simpler: progress is 100% when diff = 0. If diff is 5, it's 50% (assuming 10kg to lose).
-    // To make it look dynamic without history:
-    let maxDiff = 10; // pretend starting weight was goal+10
-    let progress = Math.max(0, Math.min(1, 1 - (diff / maxDiff)));
-    document.getElementById('wb-fill').style.width = (progress * 100) + '%';
-    if (diff === 0) document.getElementById('wb-fill').style.background = 'var(--good)';
-    else document.getElementById('wb-fill').style.background = 'var(--p)';
-  } else {
-    document.getElementById('weight-bar-wrap').style.display = 'none';
-  }
+  // Update Weight & Goals Control Panel
+  updateGoalsUI(goals);
 
   // Update Dial
   document.getElementById('dial-kcal').innerText = cal;

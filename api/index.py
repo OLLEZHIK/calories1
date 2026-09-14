@@ -2,7 +2,7 @@ from http.server import BaseHTTPRequestHandler
 import json
 from database.db import (
     get_today_summary, get_recent_meals, get_product_prices, get_meals_for_days,
-    get_recent_recommendations
+    get_recent_recommendations, save_user_weight_and_goals
 )
 import urllib.parse
 
@@ -103,6 +103,58 @@ class handler(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+        else:
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b'{"error": "Not Found"}')
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+    def do_POST(self):
+        parsed_path = urllib.parse.urlparse(self.path)
+        if parsed_path.path in ['/api/goals', '/api/goals/', '/api/weight', '/api/weight/']:
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = self.rfile.read(content_length).decode('utf-8') if content_length > 0 else "{}"
+                data = json.loads(body)
+
+                weight = data.get("weight_current")
+                if weight is not None:
+                    weight = float(weight)
+                else:
+                    weight = 76.0
+
+                mode = data.get("goal_mode")
+                weight_goal = data.get("weight_goal")
+                if weight_goal is not None:
+                    weight_goal = float(weight_goal)
+
+                from database.db import save_user_weight_and_goals, get_today_summary
+                updated_goals = save_user_weight_and_goals(weight, mode=mode, weight_goal=weight_goal)
+                summary = get_today_summary()
+
+                payload = {
+                    "status": "success",
+                    "goals": updated_goals,
+                    "summary": summary
+                }
+
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
         else:
             self.send_response(404)
             self.end_headers()

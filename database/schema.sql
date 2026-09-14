@@ -50,7 +50,16 @@ CREATE TABLE IF NOT EXISTS user_goals (
     fat_g REAL DEFAULT 70,
     carbs_g REAL DEFAULT 230,
     weight_current REAL DEFAULT 80.0,
-    weight_goal REAL DEFAULT 75.0
+    weight_goal REAL DEFAULT 75.0,
+    goal_mode TEXT DEFAULT 'loss_300'
+);
+
+CREATE TABLE IF NOT EXISTS weight_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    weight REAL NOT NULL,
+    goal_mode TEXT,
+    notes TEXT
 );
 
 CREATE TABLE IF NOT EXISTS custom_products (

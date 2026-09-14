@@ -1,7 +1,7 @@
 import re
 import json
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 try:
     import config  # noqa: F401 - ensures .env is loaded
@@ -45,6 +45,70 @@ def detect_meal_type(raw_text: str) -> str:
         return "Ужин"
     else:
         return "Перекус"
+
+def handle_weight_or_goal_update(text_lower: str) -> Optional[str]:
+    """
+    Detects user intent to update weight or goal mode, recalculates all nutrition targets,
+    and returns an informative response with exact energy checks.
+    """
+    import re
+    from database.db import save_user_weight_and_goals, get_user_goals
+
+    # Check mode change
+    target_mode = None
+    if any(k in text_lower for k in ["набор", "качаться", "набирать", "масс", "профицит", "качаюсь", "буду качаться", "кач", "gain"]):
+        target_mode = "gain"
+    else:
+        m_loss = re.search(r'(?:режим|похудение|дефицит|минус|сброс|цель|переключи|потери\s*веса)?\s*(?:на\s*)?(200|300|400)\s*(?:г|гр|грамм|g)?\b', text_lower)
+        if m_loss and m_loss.group(1):
+            val = m_loss.group(1)
+            has_intent_word = any(k in text_lower for k in ["режим", "похуден", "дефицит", "минус", "сброс", "цель", "переключ", "потер", "loss"])
+            is_isolated_mode = bool(re.match(r'^(?:режим\s*)?(200|300|400)\s*(?:г|гр|грамм|g)?$', text_lower))
+            if has_intent_word or is_isolated_mode:
+                target_mode = f"loss_{val}"
+
+    # Check weight extraction (e.g. "мой вес 76.5", "вешу 78", "вес 75 кг", "похудел до 74", "76.5 кг")
+    weight_match = re.search(
+        r'(?:мой\s+вес|вес|вешу|взвесился|похудел\s+до|запиши\s+вес|сейчас\s+вешу)\s*(?:составляет|сейчас|сегодня)?\s*[:=-]?\s*(\d+[\.,]?\d*)\s*(?:кг|килограмм|kilos|kg)?',
+        text_lower
+    )
+    if not weight_match and re.match(r'^(?:вес\s*)?(\d+[\.,]?\d*)\s*(?:кг|килограмм|kg)$', text_lower):
+        weight_match = re.match(r'^(?:вес\s*)?(\d+[\.,]?\d*)\s*(?:кг|килограмм|kg)$', text_lower)
+
+    extracted_weight = None
+    if weight_match:
+        try:
+            val = float(weight_match.group(1).replace(',', '.'))
+            if 30.0 <= val <= 300.0:
+                extracted_weight = val
+        except (ValueError, IndexError):
+            pass
+
+    # If neither weight nor mode was detected, return None
+    if extracted_weight is None and target_mode is None:
+        return None
+
+    current_goals = get_user_goals()
+    w_to_save = extracted_weight if extracted_weight is not None else current_goals["weight_current"]
+    mode_to_save = target_mode if target_mode is not None else current_goals["goal_mode"]
+
+    updated = save_user_weight_and_goals(w_to_save, mode=mode_to_save, weight_goal=current_goals.get("weight_goal"))
+
+    mode_emoji = "💪" if updated["goal_mode"] == "gain" else "📉"
+    diff_str = f"+{updated['delta_kcal']}" if updated['delta_kcal'] >= 0 else f"{updated['delta_kcal']}"
+
+    return (
+        f"⚖️ **Параметры веса и цели успешно обновлены!**\n\n"
+        f"Текущий вес: **{updated['weight_current']} кг**\n"
+        f"{mode_emoji} Режим: **{updated['goal_title']}**\n\n"
+        f"📊 **Новые суточные нормы КБЖУ**:\n"
+        f"🔥 **Калории**: **{updated['calories']} ккал** (TDEE {updated['tdee']} {diff_str} ккал)\n"
+        f"🥩 **Белки**: {updated['protein_g']}g ({round(updated['protein_g'] / updated['weight_current'], 1)} г/кг)\n"
+        f"🥑 **Жиры**: {updated['fat_g']}g ({round(updated['fat_g'] / updated['weight_current'], 1)} г/кг)\n"
+        f"🍚 **Углеводы**: {updated['carbs_g']}g\n\n"
+        f"⚡ **Проверка баланса энергии**: `{updated['energy_check']}` ✓\n\n"
+        f"🌐 [Открыть обновленный Дашборд](https://fatcaunter.vercel.app)"
+    )
 
 class TeamLeadAgent:
     """
@@ -144,6 +208,11 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
             from agents.economy_agent import economy_agent
             return economy_agent.run_audit_command()
 
+        # Check if user is logging weight or switching goal mode
+        weight_res = handle_weight_or_goal_update(text_lower)
+        if weight_res:
+            return weight_res
+
         # ── LLM Intent Classification (Gemini) ──────────────────────────────
         # When GEMINI_API_KEY is set, Gemini classifies ANY natural language phrase.
         # This replaces brittle keyword matching for the majority of inputs.
@@ -214,8 +283,7 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
                 "добавь фичу", "почему", "тренировка", "активные калории", "трекер", "дашборд",
                 "мобильн", "оптимизир", "верстк", "дизайн", "интерфейс", "адаптив", "техническое задание",
                 "тимлид", "транскриб", "отличать", "агент", "глюк", "исправь", "настрой",
-                "не работает", "не заполняется", "задачу", "задача", "отправь",
-                "рост", "роста", "вес", "веса", "килограмм", "килограмма"
+                "не работает", "не заполняется", "задачу", "задача", "отправь"
             ]):
                 feature_res = self.process_feature_request(raw_text)
                 return (
