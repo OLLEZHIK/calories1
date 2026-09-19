@@ -327,10 +327,11 @@ a{color:inherit}
 }
 .modal-head h3{font-family:Oswald,sans-serif; font-size:18px; text-transform:uppercase; margin:0;}
 .modal-close{
-  background:transparent; border:none; font-size:18px; color:var(--ink-3);
-  cursor:pointer; padding:4px 8px; border-radius:4px; transition:color 0.15s;
+  background:transparent; border:none; font-size:20px; line-height:1; color:var(--ink-3);
+  cursor:pointer; padding:6px 10px; border-radius:4px; transition:all 0.15s ease;
+  display:inline-flex; align-items:center; justify-content:center;
 }
-.modal-close:hover{color:var(--ink);}
+.modal-close:hover{color:var(--ink); background:var(--panel-2);}
 
 .modal-tabs{display:flex; border-bottom:1px solid var(--hair); margin-bottom:14px; gap:4px;}
 .modal-tab-btn{
@@ -685,7 +686,7 @@ a{color:inherit}
   </div>
 
   <!-- Product Add/Edit Modal Dialog -->
-  <div class="modal-backdrop" id="product-modal" style="display:none;" onclick="if(event.target===this) closeProductModal()">
+  <div class="modal-backdrop" id="product-modal" style="display:none;">
     <div class="modal-card">
       <div class="modal-head">
         <h3 id="modal-title">➕ Добавить продукт</h3>
@@ -791,7 +792,7 @@ a{color:inherit}
   </div>
 
   <!-- Product Delete Confirmation Modal -->
-  <div class="modal-backdrop" id="delete-modal" style="display:none;" onclick="if(event.target===this) closeDeleteModal()">
+  <div class="modal-backdrop" id="delete-modal" style="display:none;">
     <div class="modal-card" style="max-width:440px;">
       <div class="modal-head">
         <h3 style="color:var(--crit);">🗑️ Удалить продукт</h3>
@@ -809,7 +810,7 @@ a{color:inherit}
   </div>
 
   <!-- Meal Add/Edit Modal Dialog -->
-  <div class="modal-backdrop" id="meal-modal" style="display:none;" onclick="if(event.target===this) closeMealModal()">
+  <div class="modal-backdrop" id="meal-modal" style="display:none;">
     <div class="modal-card">
       <div class="modal-head">
         <h3 id="meal-modal-title">➕ Записать прием пищи</h3>
@@ -939,7 +940,7 @@ a{color:inherit}
   </div>
 
   <!-- Meal Item Delete Confirmation Modal -->
-  <div class="modal-backdrop" id="delete-meal-modal" style="display:none;" onclick="if(event.target===this) closeDeleteMealModal()">
+  <div class="modal-backdrop" id="delete-meal-modal" style="display:none;">
     <div class="modal-card" style="max-width:440px;">
       <div class="modal-head">
         <h3 style="color:var(--crit);">🗑️ Удалить из приёма пищи</h3>
