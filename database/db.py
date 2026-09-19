@@ -66,6 +66,52 @@ def supabase_request(
         print(f"Supabase API request failed: {type(e).__name__}")
         return None
 
+def _kv_set(key: str, value: Any) -> bool:
+    """Stores arbitrary JSON-serializable value in Supabase bot_sessions table."""
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return False
+    try:
+        data_str = json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
+        supabase_request(
+            "bot_sessions?on_conflict=chat_id",
+            method="POST",
+            data={"chat_id": key, "mode": data_str},
+            prefer="resolution=merge-duplicates,return=representation"
+        )
+        return True
+    except Exception as e:
+        print(f"_kv_set error for {key}: {e}")
+        return False
+
+def _kv_get(key: str) -> Optional[Any]:
+    """Retrieves value by key from Supabase bot_sessions table."""
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return None
+    try:
+        res = supabase_request(f"bot_sessions?chat_id=eq.{urllib.parse.quote(key)}&select=mode")
+        if res and isinstance(res, list) and len(res) > 0:
+            val_str = res[0].get("mode")
+            if val_str is None:
+                return None
+            try:
+                return json.loads(val_str)
+            except Exception:
+                return val_str
+    except Exception as e:
+        print(f"_kv_get error for {key}: {e}")
+    return None
+
+def _kv_delete(key: str) -> bool:
+    """Deletes key from Supabase bot_sessions table."""
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return False
+    try:
+        supabase_request(f"bot_sessions?chat_id=eq.{urllib.parse.quote(key)}", method="DELETE")
+        return True
+    except Exception as e:
+        print(f"_kv_delete error for {key}: {e}")
+        return False
+
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -548,22 +594,37 @@ def get_user_goals(user_id: int = 1) -> Dict[str, Any]:
     # Check Supabase if active
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            url = f"user_goals?user_id=eq.{user_id}&order=id.desc&limit=1" if user_id != 1 else "user_goals?select=*&order=id.desc&limit=1"
-            sp_goals = supabase_request(url)
-            if sp_goals and isinstance(sp_goals, list) and len(sp_goals) > 0:
-                g = sp_goals[0]
-                if g.get("weight_current") is not None:
-                    weight_current = float(g["weight_current"])
-                if g.get("weight_goal") is not None:
-                    weight_goal = float(g["weight_goal"])
-                if g.get("goal_mode"):
-                    goal_mode = str(g["goal_mode"])
-            mode_chat_id = f"goal_mode_{user_id}" if user_id != 1 else "goal_mode"
-            sp_mode = supabase_request(f"bot_sessions?chat_id=eq.{mode_chat_id}")
-            if sp_mode and isinstance(sp_mode, list) and len(sp_mode) > 0:
-                m = sp_mode[0].get("mode")
-                if m in ["loss_200", "loss_300", "loss_400", "gain"]:
-                    goal_mode = m
+            # 1. Check bot_sessions KV for user-specific weight
+            w_kv = _kv_get(f"user_weight_{user_id}")
+            if w_kv is not None:
+                try:
+                    weight_current = float(w_kv)
+                except (ValueError, TypeError):
+                    pass
+            else:
+                # Fallback to single user_goals table row
+                sp_goals = supabase_request("user_goals?select=*&order=id.desc&limit=1")
+                if sp_goals and isinstance(sp_goals, list) and len(sp_goals) > 0:
+                    g = sp_goals[0]
+                    if g.get("weight_current") is not None:
+                        weight_current = float(g["weight_current"])
+                    if g.get("weight_goal") is not None:
+                        weight_goal = float(g["weight_goal"])
+
+            # 2. Check user-specific weight_goal
+            wg_kv = _kv_get(f"weight_goal_{user_id}")
+            if wg_kv is not None:
+                try:
+                    weight_goal = float(wg_kv)
+                except (ValueError, TypeError):
+                    pass
+
+            # 3. Check user-specific goal mode
+            mode_kv = _kv_get(f"goal_mode_{user_id}")
+            if not mode_kv and user_id != 1:
+                mode_kv = _kv_get("goal_mode")
+            if mode_kv and str(mode_kv) in ["loss_200", "loss_300", "loss_400", "gain"]:
+                goal_mode = str(mode_kv)
         except Exception as e:
             print(f"Supabase user_goals read error: {e}")
 
@@ -621,27 +682,24 @@ def save_user_weight_and_goals(weight_current: float, mode: Optional[str] = None
     # 2. Save to Supabase
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            sp_url = f"user_goals?user_id=eq.{user_id}" if user_id != 1 else "user_goals?id=eq.1"
-            supabase_request(
-                sp_url,
-                method="PATCH",
-                data={
-                    "calories": goals["calories"],
-                    "protein_g": goals["protein_g"],
-                    "fat_g": goals["fat_g"],
-                    "carbs_g": goals["carbs_g"],
-                    "weight_current": goals["weight_current"],
-                    "weight_goal": goals["weight_goal"],
-                    "goal_mode": goals["goal_mode"],
-                    "user_id": user_id
-                }
-            )
-            supabase_request(
-                "bot_sessions?on_conflict=chat_id",
-                method="POST",
-                data={"chat_id": f"goal_mode_{user_id}" if user_id != 1 else "goal_mode", "mode": goals["goal_mode"]},
-                prefer="resolution=merge-duplicates,return=representation"
-            )
+            sp_data = {
+                "calories": goals["calories"],
+                "protein_g": goals["protein_g"],
+                "fat_g": goals["fat_g"],
+                "carbs_g": goals["carbs_g"],
+                "weight_current": goals["weight_current"],
+                "weight_goal": goals["weight_goal"]
+            }
+            # Always update user_goals id=1 for backward compatibility
+            supabase_request("user_goals?id=eq.1", method="PATCH", data=sp_data)
+
+            # Persist user weight and mode reliably via bot_sessions KV
+            _kv_set(f"user_weight_{user_id}", str(goals["weight_current"]))
+            _kv_set(f"goal_mode_{user_id}", str(goals["goal_mode"]))
+            if user_id == 1:
+                _kv_set("goal_mode", str(goals["goal_mode"]))
+            if goals.get("weight_goal"):
+                _kv_set(f"weight_goal_{user_id}", str(goals["weight_goal"]))
         except Exception as e:
             print(f"Supabase save_user_weight_and_goals error: {e}")
 
@@ -663,14 +721,10 @@ def _hash_password(password: str, salt: str) -> str:
 
 def get_users_count() -> int:
     """Returns total number of registered users. Used to allow first-time registration."""
-    # Check Supabase first
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            result = supabase_request("users?select=id")
-            if result is not None and isinstance(result, list):
-                return len(result)
-        except Exception:
-            pass
+    # Check KV registry first
+    reg = _kv_get("users_registry")
+    if isinstance(reg, list):
+        return len(reg)
     # Fallback to SQLite
     try:
         with get_connection() as conn:
@@ -689,6 +743,11 @@ def create_user(username: str, password: str) -> Dict[str, Any]:
         raise ValueError("Логин и пароль обязательны")
     if len(password) < 4:
         raise ValueError("Пароль должен быть не менее 4 символов")
+
+    # Check if user already exists in KV
+    existing_kv = _kv_get(f"user:{username}")
+    if existing_kv:
+        raise ValueError(f"Пользователь '{username}' уже существует")
 
     salt = uuid.uuid4().hex
     password_hash = _hash_password(password, salt)
@@ -709,19 +768,27 @@ def create_user(username: str, password: str) -> Dict[str, Any]:
     except Exception as e:
         print(f"create_user SQLite error: {e}")
 
-    # Save to Supabase
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            sp_result = supabase_request(
-                "users",
-                method="POST",
-                data={"username": username, "password_hash": password_hash, "salt": salt},
-                prefer="return=representation"
-            )
-            if sp_result and isinstance(sp_result, list) and sp_result[0].get("id"):
-                user_id = int(sp_result[0]["id"])  # Use Supabase ID
-        except Exception as e:
-            print(f"create_user Supabase error: {e}")
+    # Manage user registry in Supabase KV
+    registry = _kv_get("users_registry") or []
+    if not isinstance(registry, list):
+        registry = []
+
+    if user_id is None:
+        user_id = max([u.get("user_id", 0) for u in registry] + [0]) + 1
+
+    user_record = {
+        "user_id": user_id,
+        "username": username,
+        "password_hash": password_hash,
+        "salt": salt,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    _kv_set(f"user:{username}", user_record)
+    _kv_set(f"user_meta:{user_id}", {"user_id": user_id, "username": username})
+
+    if not any(u.get("username") == username for u in registry):
+        registry.append({"user_id": user_id, "username": username})
+        _kv_set("users_registry", registry)
 
     return {"user_id": user_id, "username": username}
 
@@ -731,19 +798,14 @@ def login_user(username: str, password: str) -> Optional[Dict[str, Any]]:
     """
     username = username.strip().lower()
 
-    # Try Supabase first
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            result = supabase_request(f"users?username=eq.{urllib.parse.quote(username)}&select=*")
-            if result and isinstance(result, list) and len(result) > 0:
-                u = result[0]
-                salt = u.get("salt", "")
-                stored_hash = u.get("password_hash", "")
-                if stored_hash and _hash_password(password, salt) == stored_hash:
-                    return {"user_id": int(u["id"]), "username": u["username"]}
-                return None  # Wrong password
-        except Exception as e:
-            print(f"login_user Supabase error: {e}")
+    # Try KV store first
+    u = _kv_get(f"user:{username}")
+    if u and isinstance(u, dict):
+        salt = u.get("salt", "")
+        stored_hash = u.get("password_hash", "")
+        if stored_hash and _hash_password(password, salt) == stored_hash:
+            return {"user_id": int(u.get("user_id", 1)), "username": u["username"]}
+        return None  # Wrong password
 
     # Fallback to SQLite
     try:
@@ -756,7 +818,18 @@ def login_user(username: str, password: str) -> Optional[Dict[str, Any]]:
             salt = row["salt"]
             stored_hash = row["password_hash"]
             if _hash_password(password, salt) == stored_hash:
-                return {"user_id": row["id"], "username": row["username"]}
+                # Sync back to KV store so it works across serverless lambdas
+                uid = int(row["id"])
+                user_record = {
+                    "user_id": uid,
+                    "username": row["username"],
+                    "password_hash": stored_hash,
+                    "salt": salt,
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                _kv_set(f"user:{username}", user_record)
+                _kv_set(f"user_meta:{uid}", {"user_id": uid, "username": row["username"]})
+                return {"user_id": uid, "username": row["username"]}
             return None
     except Exception as e:
         print(f"login_user SQLite error: {e}")
@@ -765,13 +838,12 @@ def login_user(username: str, password: str) -> Optional[Dict[str, Any]]:
 def create_session(user_id: int, device_name: str = "") -> str:
     """
     Creates a new session token for the user. Returns the token string.
-    Token expires in 30 days. Stored in SQLite and Supabase.
+    Token expires in 30 days. Stored in SQLite and Supabase KV.
     """
     token = uuid.uuid4().hex + uuid.uuid4().hex  # 64 char token
     now = datetime.utcnow()
     expires_at = now + timedelta(days=30)
     expires_str = expires_at.strftime("%Y-%m-%d %H:%M:%S")
-    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
 
     # Save to SQLite
     try:
@@ -784,22 +856,13 @@ def create_session(user_id: int, device_name: str = "") -> str:
     except Exception as e:
         print(f"create_session SQLite error: {e}")
 
-    # Save to Supabase
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            supabase_request(
-                "sessions",
-                method="POST",
-                data={
-                    "token": token,
-                    "user_id": user_id,
-                    "device_name": device_name or "",
-                    "expires_at": expires_at.isoformat() + "+00:00"
-                },
-                prefer="return=representation"
-            )
-        except Exception as e:
-            print(f"create_session Supabase error: {e}")
+    # Save to Supabase KV
+    session_data = {
+        "user_id": user_id,
+        "device_name": device_name or "",
+        "expires_at": expires_at.isoformat() + "+00:00"
+    }
+    _kv_set(f"sess:{token}", session_data)
 
     return token
 
@@ -820,29 +883,21 @@ def validate_session(token: str) -> Optional[int]:
 
     now = datetime.utcnow()
     now_str = now.strftime("%Y-%m-%d %H:%M:%S")
-    new_expires = (now + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    now_iso = now.isoformat()
+    new_expires_iso = (now + timedelta(days=30)).isoformat() + "+00:00"
     user_id = None
 
-    # Try Supabase first
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            result = supabase_request(
-                f"sessions?token=eq.{token}&select=user_id,expires_at"
-            )
-            if result and isinstance(result, list) and len(result) > 0:
-                sess = result[0]
-                exp = sess.get("expires_at", "")
-                if exp and exp > now.isoformat():
-                    user_id = int(sess["user_id"])
-                    # Update last_used + extend expiry
-                    supabase_request(
-                        f"sessions?token=eq.{token}",
-                        method="PATCH",
-                        data={"last_used": now.isoformat() + "+00:00",
-                              "expires_at": (now + timedelta(days=30)).isoformat() + "+00:00"}
-                    )
-        except Exception as e:
-            print(f"validate_session Supabase error: {e}")
+    # Check Supabase KV
+    sess = _kv_get(f"sess:{token}")
+    if sess and isinstance(sess, dict):
+        exp = sess.get("expires_at", "")
+        exp_clean = exp.replace("+00:00", "")
+        if exp_clean and exp_clean > now_iso:
+            user_id = int(sess["user_id"])
+            # Update expiry and last used
+            sess["expires_at"] = new_expires_iso
+            sess["last_used"] = now_iso
+            _kv_set(f"sess:{token}", sess)
 
     # Fallback to SQLite
     if user_id is None:
@@ -853,6 +908,7 @@ def validate_session(token: str) -> Optional[int]:
                 ).fetchone()
                 if row and row["expires_at"] > now_str:
                     user_id = int(row["user_id"])
+                    new_expires = (now + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
                     conn.execute(
                         "UPDATE sessions SET last_used = ?, expires_at = ? WHERE token = ?",
                         (now_str, new_expires, token)
@@ -879,24 +935,14 @@ def delete_session(token: str) -> None:
     except Exception as e:
         print(f"delete_session SQLite error: {e}")
 
-    # Delete from Supabase
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            supabase_request(f"sessions?token=eq.{token}", method="DELETE")
-        except Exception as e:
-            print(f"delete_session Supabase error: {e}")
+    # Delete from Supabase KV
+    _kv_delete(f"sess:{token}")
 
 def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
     """Returns basic user info by ID."""
-    # Try Supabase first
-    if SUPABASE_URL and SUPABASE_KEY:
-        try:
-            result = supabase_request(f"users?id=eq.{user_id}&select=id,username,created_at")
-            if result and isinstance(result, list) and len(result) > 0:
-                u = result[0]
-                return {"user_id": int(u["id"]), "username": u["username"]}
-        except Exception:
-            pass
+    u = _kv_get(f"user_meta:{user_id}")
+    if u and isinstance(u, dict):
+        return {"user_id": int(u.get("user_id", user_id)), "username": u.get("username", "Пользователь")}
     # Fallback to SQLite
     try:
         with get_connection() as conn:

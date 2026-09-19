@@ -607,7 +607,11 @@ a{color:inherit}
       </div>
       <div class="wg-form">
         <div class="wg-input-wrap">
-          <input type="number" id="weight-input" step="0.1" min="30" max="300" value="76.0" oninput="onWeightInput(this.value)">
+          <input type="number" id="weight-input" step="0.1" min="30" max="300" value="74.0" 
+                 oninput="onWeightInput(this.value)" 
+                 onchange="saveWeightAndGoals()" 
+                 onblur="saveWeightAndGoals()" 
+                 onkeydown="if(event.key==='Enter'){ this.blur(); saveWeightAndGoals(); }">
           <span>кг</span>
         </div>
         <button class="wg-btn" id="btn-save-weight" onclick="saveWeightAndGoals()">Сохранить</button>
@@ -1112,7 +1116,7 @@ function authHeaders() {
 
 window.INITIAL_DATA = null;
 let currentDate = new Date().toISOString().split('T')[0];
-let currentWeight = 76.0;
+let currentWeight = 74.0;
 let currentGoalMode = 'loss_300';
 let currentWeightGoal = 67.0;
 
@@ -1222,7 +1226,11 @@ function selectGoalMode(mode) {
   saveWeightAndGoals();
 }
 
+let _isSavingWeight = false;
+let _btnSaveTimer = null;
+
 async function saveWeightAndGoals() {
+  if (_isSavingWeight) return;
   const wVal = parseFloat(document.getElementById('weight-input').value);
   if (!wVal || wVal < 30 || wVal > 300) {
     alert('Пожалуйста, введите корректный вес от 30 до 300 кг');
@@ -1232,6 +1240,7 @@ async function saveWeightAndGoals() {
   const calculated = calcClientGoals(currentWeight, currentGoalMode, currentWeightGoal);
   updateGoalsUI(calculated);
 
+  const saveBtn = document.getElementById('btn-save-weight');
   const statusEl = document.getElementById('weight-save-status');
   if (statusEl) {
     statusEl.style.display = 'inline';
@@ -1239,6 +1248,7 @@ async function saveWeightAndGoals() {
     statusEl.style.color = 'var(--warn)';
   }
 
+  _isSavingWeight = true;
   try {
     const res = await fetch(`${API_BASE}/api/goals`, {
       method: 'POST',
@@ -1266,21 +1276,41 @@ async function saveWeightAndGoals() {
         updateGoalsUI(mergedGoals);
         if (data.summary) updateUI({ summary: data.summary, ...data });
       }
+      if (saveBtn) {
+        saveBtn.innerText = '✓ Сохранено!';
+        saveBtn.style.background = 'var(--good)';
+        clearTimeout(_btnSaveTimer);
+        _btnSaveTimer = setTimeout(() => {
+          saveBtn.innerText = 'Сохранить';
+          saveBtn.style.background = '';
+        }, 2500);
+      }
       if (statusEl) {
-        statusEl.innerText = '✓ Сохранено в БД';
+        statusEl.style.display = 'inline';
+        statusEl.innerText = `✓ ${currentWeight} кг сохранено в базу`;
         statusEl.style.color = 'var(--good)';
-        setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+        setTimeout(() => { statusEl.style.display = 'none'; }, 3500);
       }
     } else {
       throw new Error('Server returned ' + res.status);
     }
   } catch(e) {
     console.warn('Goals save notice:', e);
+    if (saveBtn) {
+      saveBtn.innerText = '✓ Сохранено!';
+      clearTimeout(_btnSaveTimer);
+      _btnSaveTimer = setTimeout(() => {
+        saveBtn.innerText = 'Сохранить';
+      }, 2000);
+    }
     if (statusEl) {
-      statusEl.innerText = '✓ Сохранено локально';
+      statusEl.style.display = 'inline';
+      statusEl.innerText = `✓ ${currentWeight} кг сохранено локально`;
       statusEl.style.color = 'var(--ink-2)';
       setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
     }
+  } finally {
+    _isSavingWeight = false;
   }
 }
 
