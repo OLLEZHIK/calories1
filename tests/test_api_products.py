@@ -1,6 +1,11 @@
-﻿import json
+import json
 import io
+import sys
 from http.server import BaseHTTPRequestHandler
+
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 from api.index import handler
 
 class MockRequest:

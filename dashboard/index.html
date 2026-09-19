@@ -222,12 +222,21 @@ a{color:inherit}
   .mealcard .mc-macro{margin-left:0}
 }
 .mealcard ul{list-style:none; margin:0; padding:6px 14px 12px; display:flex; flex-direction:column}
-.mealcard li{display:flex; align-items:baseline; gap:8px; padding:6px 0; border-top:1px solid var(--hair); font-size:13.5px}
+.mealcard li{display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--hair); font-size:13.5px}
 .mealcard li:first-child{border-top:0}
 .mealcard li .nm{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .mealcard li .g{font-family:"JetBrains Mono",monospace; font-size:11.5px; color:var(--ink-3); white-space:nowrap}
 .mealcard li .k{font-family:"JetBrains Mono",monospace; font-size:12.5px; font-variant-numeric:tabular-nums; min-width:48px; text-align:right}
 .mealcard li .pr{font-family:"JetBrains Mono",monospace; font-size:12px; font-weight:600; color:var(--good); font-variant-numeric:tabular-nums; margin-left:4px; white-space:nowrap}
+.mealcard li .item-actions{display:inline-flex; align-items:center; gap:3px; margin-left:4px; opacity:0.4; transition:opacity .15s ease;}
+.mealcard li:hover .item-actions{opacity:1;}
+.btn-mini-action{
+  background:var(--panel-2); border:1px solid var(--hair); border-radius:3px;
+  padding:2px 5px; font-size:11px; cursor:pointer; line-height:1; color:var(--ink);
+  transition:all 0.15s ease; display:inline-flex; align-items:center; justify-content:center;
+}
+.btn-mini-action:hover{border-color:var(--ink-3); background:color-mix(in srgb, var(--p) 12%, var(--panel));}
+.btn-mini-action.btn-del:hover{border-color:var(--crit); color:var(--crit); background:var(--crit-bg);}
 
 .sect{margin-top:32px}
 .sect-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-bottom:8px}
@@ -322,6 +331,15 @@ a{color:inherit}
   cursor:pointer; padding:4px 8px; border-radius:4px; transition:color 0.15s;
 }
 .modal-close:hover{color:var(--ink);}
+
+.modal-tabs{display:flex; border-bottom:1px solid var(--hair); margin-bottom:14px; gap:4px;}
+.modal-tab-btn{
+  background:transparent; border:none; border-bottom:2px solid transparent;
+  padding:6px 12px; font-family:"Golos Text",sans-serif; font-size:13px; font-weight:600;
+  color:var(--ink-3); cursor:pointer; transition:all 0.15s ease;
+}
+.modal-tab-btn:hover{color:var(--ink);}
+.modal-tab-btn.active{color:var(--p); border-bottom-color:var(--p);}
 
 .form-row{display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap;}
 .form-group{display:flex; flex-direction:column; gap:5px; flex:1; min-width:120px;}
@@ -580,27 +598,42 @@ a{color:inherit}
   <!-- Meals List -->
   <div class="sect">
     <div class="sect-head">
-      <h2>Приемы пищи</h2>
-      <span class="eyebrow">Режим питания</span>
+      <div>
+        <h2>Приемы пищи</h2>
+        <span class="eyebrow">Режим питания</span>
+      </div>
+      <button class="btn-add-product" onclick="openMealModal('add')">➕ Записать прием пищи</button>
     </div>
     <hr class="rule-heavy">
 
     <div class="meals" id="meals-container">
       <!-- 4 Static Blocks -->
       <div class="mealcard" id="meal-breakfast" style="border-top-color:var(--f)">
-        <div class="mc-head"><span class="mc-name" style="color:var(--f)">🍳 Завтрак</span></div>
+        <div class="mc-head">
+          <span class="mc-name" style="color:var(--f)">🍳 Завтрак</span>
+          <button type="button" class="btn-action" title="Добавить в Завтрак" onclick="openMealModal('add', null, 'Завтрак')">➕</button>
+        </div>
         <div class="mc-sum"><span class="mc-k">0<small>ккал</small></span></div><ul></ul>
       </div>
       <div class="mealcard" id="meal-lunch" style="border-top-color:var(--p)">
-        <div class="mc-head"><span class="mc-name" style="color:var(--p)">🍲 Обед</span></div>
+        <div class="mc-head">
+          <span class="mc-name" style="color:var(--p)">🍲 Обед</span>
+          <button type="button" class="btn-action" title="Добавить в Обед" onclick="openMealModal('add', null, 'Обед')">➕</button>
+        </div>
         <div class="mc-sum"><span class="mc-k">0<small>ккал</small></span></div><ul></ul>
       </div>
       <div class="mealcard" id="meal-dinner" style="border-top-color:var(--c)">
-        <div class="mc-head"><span class="mc-name" style="color:var(--c)">🌙 Ужин</span></div>
+        <div class="mc-head">
+          <span class="mc-name" style="color:var(--c)">🌙 Ужин</span>
+          <button type="button" class="btn-action" title="Добавить в Ужин" onclick="openMealModal('add', null, 'Ужин')">➕</button>
+        </div>
         <div class="mc-sum"><span class="mc-k">0<small>ккал</small></span></div><ul></ul>
       </div>
       <div class="mealcard" id="meal-snack" style="border-top-color:var(--warn)">
-        <div class="mc-head"><span class="mc-name" style="color:var(--warn)">🍎 Перекусы</span></div>
+        <div class="mc-head">
+          <span class="mc-name" style="color:var(--warn)">🍎 Перекусы</span>
+          <button type="button" class="btn-action" title="Добавить в Перекусы" onclick="openMealModal('add', null, 'Перекус')">➕</button>
+        </div>
         <div class="mc-sum"><span class="mc-k">0<small>ккал</small></span></div><ul></ul>
       </div>
     </div>
@@ -771,6 +804,154 @@ a{color:inherit}
       <div class="modal-foot">
         <button type="button" class="btn-secondary" onclick="closeDeleteModal()">Отмена</button>
         <button type="button" class="btn-danger" id="btn-confirm-delete" onclick="confirmDeleteProduct()">Удалить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Meal Add/Edit Modal Dialog -->
+  <div class="modal-backdrop" id="meal-modal" style="display:none;" onclick="if(event.target===this) closeMealModal()">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="meal-modal-title">➕ Записать прием пищи</h3>
+        <button type="button" class="modal-close" onclick="closeMealModal()">✕</button>
+      </div>
+
+      <!-- Mode Tabs (Visible in 'add' mode) -->
+      <div class="modal-tabs" id="meal-modal-tabs">
+        <button type="button" class="modal-tab-btn active" id="tab-btn-catalog" onclick="switchMealTab('catalog')">📦 Из базы продуктов</button>
+        <button type="button" class="modal-tab-btn" id="tab-btn-manual" onclick="switchMealTab('manual')">✍️ Свой продукт</button>
+        <button type="button" class="modal-tab-btn" id="tab-btn-ai" onclick="switchMealTab('ai')">✨ Текст через ИИ</button>
+      </div>
+
+      <form id="meal-form" onsubmit="event.preventDefault(); saveMealFromModal();">
+        <input type="hidden" id="meal-form-item-id">
+        <input type="hidden" id="meal-form-mode" value="add">
+        <input type="hidden" id="meal-form-active-tab" value="catalog">
+
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label>Прием пищи *</label>
+            <select id="meal-type-select">
+              <option value="Завтрак">🍳 Завтрак</option>
+              <option value="Обед">🍲 Обед</option>
+              <option value="Ужин">🌙 Ужин</option>
+              <option value="Перекус">🍎 Перекус</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>Дата *</label>
+            <input type="date" id="meal-date-input" required>
+          </div>
+        </div>
+
+        <!-- TAB 1: Catalog Selection & Live Macro Calc -->
+        <div id="tab-panel-catalog">
+          <div class="form-group" style="margin-bottom:12px;">
+            <label>Выберите продукт из базы *</label>
+            <input type="text" id="meal-catalog-search" list="meal-catalog-datalist" placeholder="Начните вводить название продукта..." oninput="onMealCatalogSelect(this.value)">
+            <datalist id="meal-catalog-datalist"></datalist>
+          </div>
+        </div>
+
+        <!-- TAB 3: Natural Language via AI -->
+        <div id="tab-panel-ai" style="display:none;">
+          <div class="form-group" style="margin-bottom:12px;">
+            <label>Текст блюда (распознавание через ИИ) *</label>
+            <textarea id="meal-ai-text" rows="3" placeholder="например: 3 вареных яйца, 50г сыра, кофе с молоком"></textarea>
+            <div style="font-size:11.5px; color:var(--ink-3); margin-top:4px;">
+              💡 Мультиагентный конвейер автоматически распознает ингредиенты, рассчитает калории, БЖУ и проверит физическую модель энергии.
+            </div>
+          </div>
+        </div>
+
+        <!-- PRODUCT DETAILS (Used for Catalog & Manual & Edit) -->
+        <div id="meal-item-details">
+          <div class="form-row" id="meal-manual-name-row" style="display:none;">
+            <div class="form-group" style="flex:2;">
+              <label>Название блюда / продукта *</label>
+              <input type="text" id="meal-prod-name-input" placeholder="например: Гречневая каша с маслом">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label>Категория</label>
+              <select id="meal-prod-cat-select">
+                <option value="general">Общая</option>
+                <option value="meat">🥩 Мясо</option>
+                <option value="fish">🐟 Рыба</option>
+                <option value="eggs_dairy">🥚 Молочные</option>
+                <option value="fats_oils">🥑 Жиры</option>
+                <option value="vegetables">🥦 Овощи</option>
+                <option value="fruit">🍎 Фрукты</option>
+                <option value="grains">🌾 Крупы</option>
+                <option value="bakery">🍞 Выпечка</option>
+                <option value="sweets">🍫 Сладости</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group" style="flex:1;">
+              <label>Вес порции (г) *</label>
+              <input type="number" id="meal-weight-input" min="1" step="1" value="100" required oninput="onMealWeightChange()">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label>Калории (ккал) *</label>
+              <input type="number" id="meal-cal-input" min="0" max="4000" step="1" value="0" required>
+            </div>
+          </div>
+
+          <div class="macro-section-title">Пищевая ценность на порцию</div>
+          <div class="macro-grid">
+            <div class="form-group">
+              <label style="color:var(--p);">Белки (г)</label>
+              <input type="number" id="meal-p-input" min="0" max="500" step="0.1" value="0" oninput="onMealMacroInput()">
+            </div>
+            <div class="form-group">
+              <label style="color:var(--f);">Жиры (г)</label>
+              <input type="number" id="meal-f-input" min="0" max="500" step="0.1" value="0" oninput="onMealMacroInput()">
+            </div>
+            <div class="form-group">
+              <label style="color:var(--c);">Углеводы (г)</label>
+              <input type="number" id="meal-c-input" min="0" max="500" step="0.1" value="0" oninput="onMealMacroInput()">
+            </div>
+            <div class="form-group">
+              <label>Формула</label>
+              <button type="button" class="btn-sync-cal" style="height:36px; width:100%;" onclick="syncMealCaloriesFromFormula()" title="Рассчитать калории строго по макросам">
+                ⚡ По формуле
+              </button>
+            </div>
+          </div>
+
+          <!-- Formula Check Badge -->
+          <div class="formula-badge" id="meal-formula-badge">
+            <span id="meal-formula-text">4×Б + 9×Ж + 4×У = 0 ккал</span>
+            <span id="meal-base-100g-info" style="color:var(--ink-3); font-size:11px;"></span>
+          </div>
+        </div>
+
+        <div id="meal-modal-status-msg" class="modal-status" style="display:none;"></div>
+
+        <div class="modal-foot">
+          <button type="button" class="btn-secondary" onclick="closeMealModal()">Отмена</button>
+          <button type="submit" class="btn-primary" id="btn-meal-modal-save">💾 Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Meal Item Delete Confirmation Modal -->
+  <div class="modal-backdrop" id="delete-meal-modal" style="display:none;" onclick="if(event.target===this) closeDeleteMealModal()">
+    <div class="modal-card" style="max-width:440px;">
+      <div class="modal-head">
+        <h3 style="color:var(--crit);">🗑️ Удалить из приёма пищи</h3>
+        <button type="button" class="modal-close" onclick="closeDeleteMealModal()">✕</button>
+      </div>
+      <div style="padding:14px 0;">
+        <p style="margin:0 0 8px 0;">Вы действительно хотите удалить <strong id="delete-meal-item-name" style="color:var(--ink);"></strong>?</p>
+        <p style="font-size:12.5px; color:var(--ink-3); margin:0;">Запись будет удалена, а калории и БЖУ за день пересчитаны.</p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn-secondary" onclick="closeDeleteMealModal()">Отмена</button>
+        <button type="button" class="btn-danger" id="btn-confirm-delete-meal" onclick="confirmDeleteMealItem()">Удалить</button>
       </div>
     </div>
   </div>
@@ -1050,6 +1231,7 @@ function updateUI(data) {
   document.getElementById('ring-c').style.strokeDashoffset = 301 - (301 * Math.min(1.0, c / goals.carbs_g));
 
   // Update Meals (4 Blocks)
+  window._MEAL_ITEMS = {};
   const blocks = { 'Завтрак': [], 'Обед': [], 'Ужин': [], 'Перекус': [] };
   
   meals.forEach(m => {
@@ -1058,6 +1240,17 @@ function updateUI(data) {
     else if(t.toLowerCase().includes('обед')) blocks['Обед'].push(m);
     else if(t.toLowerCase().includes('ужин')) blocks['Ужин'].push(m);
     else blocks['Перекус'].push(m);
+
+    (m.items || []).forEach(i => {
+      if (i.id) {
+        window._MEAL_ITEMS[i.id] = {
+          ...i,
+          meal_id: m.id,
+          meal_type: m.meal_type,
+          timestamp: m.timestamp
+        };
+      }
+    });
   });
 
   const updateBlock = (id, arr) => {
@@ -1074,7 +1267,12 @@ function updateUI(data) {
       totCost += m.total_cost_eur || 0;
       (m.items || []).forEach(i => {
         const costStr = (i.cost_eur && i.cost_eur > 0) ? `<span class="pr">${Number(i.cost_eur).toFixed(2)} €</span>` : '';
-        listHtml += `<li><span class="nm">${escapeHtml(i.product_name)}</span><span class="g">${Math.round(i.quantity_g)}г</span><span class="k">${Math.round(i.calories)} ккал</span>${costStr}</li>`;
+        const itemActions = i.id ? `
+          <div class="item-actions">
+            <button type="button" class="btn-mini-action" title="Редактировать запись" onclick="openMealModal('edit', ${i.id})">✏️</button>
+            <button type="button" class="btn-mini-action btn-del" title="Удалить запись" onclick="openDeleteMealItemModal(${i.id})">🗑️</button>
+          </div>` : '';
+        listHtml += `<li><span class="nm">${escapeHtml(i.product_name)}</span><span class="g">${Math.round(i.quantity_g)}г</span><span class="k">${Math.round(i.calories)} ккал</span>${costStr}${itemActions}</li>`;
       });
     });
     
@@ -1105,6 +1303,7 @@ function updateUI(data) {
   // Products Table Update
   window._ALL_PRODUCTS = products || [];
   renderProductsTable(window._ALL_PRODUCTS);
+  populateMealCatalogDatalist();
 }
 
 window._ALL_PRODUCTS = [];
@@ -1422,6 +1621,329 @@ async function confirmDeleteProduct() {
       window._ALL_PRODUCTS = data.products;
       renderProductsTable(window._ALL_PRODUCTS);
     }
+    loadLiveDashboard(currentDate);
+  } catch (err) {
+    console.error('Delete error:', err);
+    alert('Ошибка при удалении: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerText = 'Удалить';
+  }
+}
+
+/* ==================== Meals Management Functions ==================== */
+let selectedCatalogProduct = null;
+let mealItemToDelete = null;
+
+function populateMealCatalogDatalist() {
+  const datalist = document.getElementById('meal-catalog-datalist');
+  if (!datalist || !window._ALL_PRODUCTS) return;
+  datalist.innerHTML = window._ALL_PRODUCTS.map(p => 
+    `<option value="${escapeHtml(p.product_name)}">`
+  ).join('');
+}
+
+function switchMealTab(tabName) {
+  const formMode = document.getElementById('meal-form-mode').value;
+  if (formMode === 'edit') return;
+
+  document.getElementById('meal-form-active-tab').value = tabName;
+  document.getElementById('tab-btn-catalog').classList.toggle('active', tabName === 'catalog');
+  document.getElementById('tab-btn-manual').classList.toggle('active', tabName === 'manual');
+  document.getElementById('tab-btn-ai').classList.toggle('active', tabName === 'ai');
+
+  const catalogPanel = document.getElementById('tab-panel-catalog');
+  const manualRow = document.getElementById('meal-manual-name-row');
+  const aiPanel = document.getElementById('tab-panel-ai');
+  const details = document.getElementById('meal-item-details');
+
+  if (tabName === 'catalog') {
+    catalogPanel.style.display = 'block';
+    manualRow.style.display = 'none';
+    aiPanel.style.display = 'none';
+    details.style.display = 'block';
+    populateMealCatalogDatalist();
+  } else if (tabName === 'manual') {
+    catalogPanel.style.display = 'none';
+    manualRow.style.display = 'flex';
+    aiPanel.style.display = 'none';
+    details.style.display = 'block';
+  } else if (tabName === 'ai') {
+    catalogPanel.style.display = 'none';
+    manualRow.style.display = 'none';
+    aiPanel.style.display = 'block';
+    details.style.display = 'none';
+  }
+}
+
+function onMealCatalogSelect(val) {
+  const query = (val || '').trim().toLowerCase();
+  const matched = (window._ALL_PRODUCTS || []).find(p => (p.product_name || '').toLowerCase() === query);
+  
+  if (matched) {
+    selectedCatalogProduct = matched;
+    document.getElementById('meal-prod-name-input').value = matched.product_name;
+    document.getElementById('meal-prod-cat-select').value = matched.category || 'general';
+    const baseInfo = document.getElementById('meal-base-100g-info');
+    if (baseInfo) {
+      baseInfo.innerText = `База 100г: ${Math.round(matched.calories_per_100g || 0)} ккал (Б:${matched.protein_per_100g || 0}г, Ж:${matched.fat_per_100g || 0}г, У:${matched.carbs_per_100g || 0}г)`;
+    }
+    onMealWeightChange();
+  } else {
+    selectedCatalogProduct = null;
+    const baseInfo = document.getElementById('meal-base-100g-info');
+    if (baseInfo) baseInfo.innerText = '';
+  }
+}
+
+function onMealWeightChange() {
+  const w = parseFloat(document.getElementById('meal-weight-input').value) || 100;
+  if (selectedCatalogProduct) {
+    const p100 = selectedCatalogProduct.protein_per_100g || 0;
+    const f100 = selectedCatalogProduct.fat_per_100g || 0;
+    const c100 = selectedCatalogProduct.carbs_per_100g || 0;
+    const cal100 = selectedCatalogProduct.calories_per_100g || (4 * p100 + 9 * f100 + 4 * c100);
+
+    const calcP = +((p100 * w) / 100.0).toFixed(1);
+    const calcF = +((f100 * w) / 100.0).toFixed(1);
+    const calcC = +((c100 * w) / 100.0).toFixed(1);
+    const calcCal = Math.round((cal100 * w) / 100.0);
+
+    document.getElementById('meal-p-input').value = calcP;
+    document.getElementById('meal-f-input').value = calcF;
+    document.getElementById('meal-c-input').value = calcC;
+    document.getElementById('meal-cal-input').value = calcCal;
+  }
+  onMealMacroInput();
+}
+
+function onMealMacroInput() {
+  const p = parseFloat(document.getElementById('meal-p-input').value) || 0;
+  const f = parseFloat(document.getElementById('meal-f-input').value) || 0;
+  const c = parseFloat(document.getElementById('meal-c-input').value) || 0;
+  const formulaCal = Math.round(4 * p + 9 * f + 4 * c);
+  const textEl = document.getElementById('meal-formula-text');
+  if (textEl) {
+    textEl.innerText = `4×${p} + 9×${f} + 4×${c} = ${formulaCal} ккал`;
+  }
+}
+
+function syncMealCaloriesFromFormula() {
+  const p = parseFloat(document.getElementById('meal-p-input').value) || 0;
+  const f = parseFloat(document.getElementById('meal-f-input').value) || 0;
+  const c = parseFloat(document.getElementById('meal-c-input').value) || 0;
+  const formulaCal = Math.round(4 * p + 9 * f + 4 * c);
+  document.getElementById('meal-cal-input').value = formulaCal;
+  onMealMacroInput();
+}
+
+function openMealModal(mode, itemId = null, presetMealType = null) {
+  const modal = document.getElementById('meal-modal');
+  const title = document.getElementById('meal-modal-title');
+  const tabs = document.getElementById('meal-modal-tabs');
+  const formMode = document.getElementById('meal-form-mode');
+  const statusMsg = document.getElementById('meal-modal-status-msg');
+  if (statusMsg) statusMsg.style.display = 'none';
+
+  formMode.value = mode;
+  document.getElementById('meal-date-input').value = currentDate;
+  populateMealCatalogDatalist();
+
+  if (mode === 'edit' && itemId && window._MEAL_ITEMS && window._MEAL_ITEMS[itemId]) {
+    const it = window._MEAL_ITEMS[itemId];
+    title.innerText = `✏️ Редактировать: ${it.product_name}`;
+    tabs.style.display = 'none';
+    document.getElementById('meal-form-item-id').value = it.id;
+    document.getElementById('meal-form-active-tab').value = 'manual';
+
+    document.getElementById('tab-panel-catalog').style.display = 'none';
+    document.getElementById('meal-manual-name-row').style.display = 'flex';
+    document.getElementById('tab-panel-ai').style.display = 'none';
+    document.getElementById('meal-item-details').style.display = 'block';
+
+    document.getElementById('meal-type-select').value = it.meal_type || 'Перекус';
+    document.getElementById('meal-prod-name-input').value = it.product_name || '';
+    document.getElementById('meal-prod-cat-select').value = it.category || 'general';
+    document.getElementById('meal-weight-input').value = Math.round(it.quantity_g || 100);
+    document.getElementById('meal-cal-input').value = Math.round(it.calories || 0);
+    document.getElementById('meal-p-input').value = it.protein_g || 0;
+    document.getElementById('meal-f-input').value = it.fat_g || 0;
+    document.getElementById('meal-c-input').value = it.carbs_g || 0;
+    selectedCatalogProduct = null;
+    const baseInfo = document.getElementById('meal-base-100g-info');
+    if (baseInfo) baseInfo.innerText = '';
+    onMealMacroInput();
+  } else {
+    title.innerText = presetMealType ? `➕ Добавить в ${presetMealType}` : '➕ Записать прием пищи';
+    tabs.style.display = 'flex';
+    document.getElementById('meal-form-item-id').value = '';
+    document.getElementById('meal-type-select').value = presetMealType || 'Завтрак';
+    document.getElementById('meal-catalog-search').value = '';
+    document.getElementById('meal-prod-name-input').value = '';
+    document.getElementById('meal-prod-cat-select').value = 'general';
+    document.getElementById('meal-weight-input').value = 100;
+    document.getElementById('meal-cal-input').value = 0;
+    document.getElementById('meal-p-input').value = 0;
+    document.getElementById('meal-f-input').value = 0;
+    document.getElementById('meal-c-input').value = 0;
+    document.getElementById('meal-ai-text').value = '';
+    selectedCatalogProduct = null;
+    const baseInfo = document.getElementById('meal-base-100g-info');
+    if (baseInfo) baseInfo.innerText = '';
+    switchMealTab('catalog');
+    onMealMacroInput();
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeMealModal() {
+  document.getElementById('meal-modal').style.display = 'none';
+}
+
+async function saveMealFromModal() {
+  const mode = document.getElementById('meal-form-mode').value;
+  const activeTab = document.getElementById('meal-form-active-tab').value;
+  const mealType = document.getElementById('meal-type-select').value;
+  const targetDate = document.getElementById('meal-date-input').value || currentDate;
+  const btnSave = document.getElementById('btn-meal-modal-save');
+
+  btnSave.disabled = true;
+  btnSave.innerText = '⏳ Сохранение...';
+
+  try {
+    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
+
+    if (mode === 'edit') {
+      const itemId = document.getElementById('meal-form-item-id').value;
+      const prodName = document.getElementById('meal-prod-name-input').value.trim();
+      if (!prodName) {
+        alert('Укажите название продукта');
+        return;
+      }
+      const weight = parseFloat(document.getElementById('meal-weight-input').value) || 100;
+      const cal = parseFloat(document.getElementById('meal-cal-input').value) || 0;
+      const p = parseFloat(document.getElementById('meal-p-input').value) || 0;
+      const f = parseFloat(document.getElementById('meal-f-input').value) || 0;
+      const c = parseFloat(document.getElementById('meal-c-input').value) || 0;
+      const cat = document.getElementById('meal-prod-cat-select').value;
+
+      const res = await fetch(`${apiBase}/api/meals/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: parseInt(itemId),
+          product_name: prodName,
+          quantity_g: weight,
+          calories: cal,
+          protein_g: p,
+          fat_g: f,
+          carbs_g: c,
+          category: cat,
+          meal_type: mealType,
+          date: targetDate
+        })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      closeMealModal();
+      showToast(data.message || '✓ Запись обновлена!');
+      loadLiveDashboard(targetDate);
+    } else {
+      let payload = {
+        action: 'add',
+        meal_type: mealType,
+        date: targetDate
+      };
+
+      if (activeTab === 'ai') {
+        const rawText = document.getElementById('meal-ai-text').value.trim();
+        if (!rawText) {
+          alert('Введите текст блюда для ИИ-распознавания');
+          return;
+        }
+        payload.raw_input = rawText;
+      } else {
+        const prodName = (activeTab === 'catalog')
+          ? document.getElementById('meal-catalog-search').value.trim()
+          : document.getElementById('meal-prod-name-input').value.trim();
+
+        if (!prodName) {
+          alert('Укажите или выберите продукт');
+          return;
+        }
+        const weight = parseFloat(document.getElementById('meal-weight-input').value) || 100;
+        const cal = parseFloat(document.getElementById('meal-cal-input').value) || 0;
+        const p = parseFloat(document.getElementById('meal-p-input').value) || 0;
+        const f = parseFloat(document.getElementById('meal-f-input').value) || 0;
+        const c = parseFloat(document.getElementById('meal-c-input').value) || 0;
+        const cat = (activeTab === 'catalog' && selectedCatalogProduct)
+          ? selectedCatalogProduct.category
+          : document.getElementById('meal-prod-cat-select').value;
+
+        payload.items = [{
+          product_name: prodName,
+          quantity_g: weight,
+          calories: cal,
+          protein_g: p,
+          fat_g: f,
+          carbs_g: c,
+          category: cat || 'general'
+        }];
+      }
+
+      const res = await fetch(`${apiBase}/api/meals/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      closeMealModal();
+      showToast(data.message || '✓ Прием пищи добавлен!');
+      loadLiveDashboard(targetDate);
+    }
+  } catch (err) {
+    console.error('Meal save error:', err);
+    alert('Ошибка при сохранении: ' + err.message);
+  } finally {
+    btnSave.disabled = false;
+    btnSave.innerText = '💾 Сохранить';
+  }
+}
+
+function openDeleteMealItemModal(itemId) {
+  if (!itemId || !window._MEAL_ITEMS || !window._MEAL_ITEMS[itemId]) return;
+  mealItemToDelete = window._MEAL_ITEMS[itemId];
+  document.getElementById('delete-meal-item-name').innerText = `«${mealItemToDelete.product_name}» (${Math.round(mealItemToDelete.quantity_g)}г, ${Math.round(mealItemToDelete.calories)} ккал)`;
+  document.getElementById('delete-meal-modal').style.display = 'flex';
+}
+
+function closeDeleteMealModal() {
+  document.getElementById('delete-meal-modal').style.display = 'none';
+  mealItemToDelete = null;
+}
+
+async function confirmDeleteMealItem() {
+  if (!mealItemToDelete) return;
+  const btn = document.getElementById('btn-confirm-delete-meal');
+  btn.disabled = true;
+  btn.innerText = '⏳ Удаление...';
+
+  try {
+    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
+    const res = await fetch(`${apiBase}/api/meals/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        item_id: mealItemToDelete.id,
+        date: currentDate
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    closeDeleteMealModal();
+    showToast(data.message || '✓ Запись удалена!');
     loadLiveDashboard(currentDate);
   } catch (err) {
     console.error('Delete error:', err);

@@ -329,17 +329,24 @@ def get_bot_session_mode(chat_id: int) -> Optional[str]:
         row = conn.execute("SELECT mode FROM bot_sessions WHERE chat_id = ?", (chat_id,)).fetchone()
     return row["mode"] if row else None
 
-def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal_type: str = "Прием пищи") -> int:
+def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal_type: str = "Прием пищи", custom_timestamp: Optional[str] = None) -> int:
     """
     Saves a raw meal log and its parsed/calculated items into SQLite and Supabase Cloud DB.
+    Supports explicit custom_timestamp (e.g. 'YYYY-MM-DD HH:MM:SS').
     """
     meal_id = 0
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO meals (raw_input, input_type, notes) VALUES (?, ?, ?)",
-            (raw_input, input_type, meal_type)
-        )
+        if custom_timestamp:
+            cursor.execute(
+                "INSERT INTO meals (raw_input, input_type, notes, timestamp) VALUES (?, ?, ?, ?)",
+                (raw_input, input_type, meal_type, custom_timestamp)
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO meals (raw_input, input_type, notes) VALUES (?, ?, ?)",
+                (raw_input, input_type, meal_type)
+            )
         meal_id = cursor.lastrowid
 
         for item in items:
@@ -364,13 +371,19 @@ def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal
     # Sync to Supabase Cloud DB for persistent Vercel state
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            sp_meal = supabase_request("meals", method="POST", data={
+            meal_data = {
                 "raw_input": raw_input,
                 "input_type": input_type,
                 "notes": meal_type
-            })
+            }
+            if custom_timestamp:
+                meal_data["timestamp"] = custom_timestamp
+
+            sp_meal = supabase_request("meals", method="POST", data=meal_data)
             if sp_meal and isinstance(sp_meal, list) and len(sp_meal) > 0:
                 sp_id = sp_meal[0].get("id")
+                if sp_id:
+                    meal_id = sp_id
                 for item in items:
                     supabase_request("meal_items", method="POST", data={
                         "meal_id": sp_id,
@@ -835,6 +848,184 @@ def delete_meal(meal_id: int) -> bool:
             print(f"Supabase delete meal warning: {e}")
 
     return True
+
+def delete_meal_item(item_id: int) -> bool:
+    """
+    Deletes a single meal_item by item_id from SQLite and Supabase.
+    If no items remain in the parent meal, deletes the parent meal record too.
+    """
+    meal_id = None
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        row = cursor.execute("SELECT meal_id FROM meal_items WHERE id = ?", (item_id,)).fetchone()
+        if row:
+            meal_id = row["meal_id"]
+        cursor.execute("DELETE FROM meal_items WHERE id = ?", (item_id,))
+        conn.commit()
+
+        if meal_id:
+            rem = cursor.execute("SELECT COUNT(*) as cnt FROM meal_items WHERE meal_id = ?", (meal_id,)).fetchone()
+            if rem and rem["cnt"] == 0:
+                cursor.execute("DELETE FROM meals WHERE id = ?", (meal_id,))
+                conn.commit()
+
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            sp_item = supabase_request(f"meal_items?id=eq.{item_id}&select=meal_id")
+            sp_meal_id = sp_item[0].get("meal_id") if (sp_item and isinstance(sp_item, list) and len(sp_item) > 0) else None
+
+            supabase_request(f"meal_items?id=eq.{item_id}", method="DELETE")
+            if sp_meal_id:
+                rem_sp = supabase_request(f"meal_items?meal_id=eq.{sp_meal_id}&select=id")
+                if isinstance(rem_sp, list) and len(rem_sp) == 0:
+                    supabase_request(f"meals?id=eq.{sp_meal_id}", method="DELETE")
+        except Exception as e:
+            print(f"Supabase delete meal_item warning: {e}")
+
+    return True
+
+def update_meal_item(
+    item_id: int,
+    product_name: str,
+    quantity_g: float,
+    calories: float,
+    protein_g: float,
+    fat_g: float,
+    carbs_g: float,
+    category: str = "general",
+    meal_type: Optional[str] = None,
+    timestamp: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Updates an existing meal_item in SQLite and Supabase.
+    Optionally updates the parent meal's meal_type (notes) and timestamp.
+    """
+    meal_id = None
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        row = cursor.execute("SELECT meal_id FROM meal_items WHERE id = ?", (item_id,)).fetchone()
+        if row:
+            meal_id = row["meal_id"]
+
+        cursor.execute("""
+            UPDATE meal_items
+            SET product_name = ?,
+                quantity_g = ?,
+                calories = ?,
+                protein_g = ?,
+                fat_g = ?,
+                carbs_g = ?,
+                category = ?
+            WHERE id = ?
+        """, (
+            product_name.strip(),
+            float(quantity_g),
+            float(calories),
+            float(protein_g),
+            float(fat_g),
+            float(carbs_g),
+            category,
+            item_id
+        ))
+
+        if meal_id:
+            if meal_type and timestamp:
+                cursor.execute("UPDATE meals SET notes = ?, timestamp = ? WHERE id = ?", (meal_type, timestamp, meal_id))
+            elif meal_type:
+                cursor.execute("UPDATE meals SET notes = ? WHERE id = ?", (meal_type, meal_id))
+            elif timestamp:
+                cursor.execute("UPDATE meals SET timestamp = ? WHERE id = ?", (timestamp, meal_id))
+
+        conn.commit()
+
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            sp_item = supabase_request(f"meal_items?id=eq.{item_id}&select=meal_id")
+            sp_meal_id = sp_item[0].get("meal_id") if (sp_item and isinstance(sp_item, list) and len(sp_item) > 0) else None
+            if sp_meal_id:
+                meal_id = sp_meal_id
+
+            supabase_request(f"meal_items?id=eq.{item_id}", method="PATCH", data={
+                "product_name": product_name.strip(),
+                "quantity_g": float(quantity_g),
+                "calories": float(calories),
+                "protein_g": float(protein_g),
+                "fat_g": float(fat_g),
+                "carbs_g": float(carbs_g),
+                "category": category
+            })
+            if sp_meal_id and (meal_type or timestamp):
+                m_patch = {}
+                if meal_type:
+                    m_patch["notes"] = meal_type
+                if timestamp:
+                    m_patch["timestamp"] = timestamp
+                supabase_request(f"meals?id=eq.{sp_meal_id}", method="PATCH", data=m_patch)
+        except Exception as e:
+            print(f"Supabase update meal_item warning: {e}")
+
+    return {
+        "id": item_id,
+        "meal_id": meal_id,
+        "product_name": product_name.strip(),
+        "quantity_g": float(quantity_g),
+        "calories": float(calories),
+        "protein_g": float(protein_g),
+        "fat_g": float(fat_g),
+        "carbs_g": float(carbs_g),
+        "category": category,
+        "meal_type": meal_type
+    }
+
+def add_meal_entry(
+    meal_type: str = "Перекус",
+    items: Optional[List[Dict[str, Any]]] = None,
+    raw_input: Optional[str] = None,
+    target_date: Optional[str] = None,
+    target_time: Optional[str] = None
+) -> int:
+    """
+    Creates a new meal entry with structured items or by parsing raw text.
+    Binds to specified date/time if provided.
+    """
+    ts = None
+    if target_date:
+        t_time = target_time or datetime.now().strftime("%H:%M:%S")
+        if len(t_time) == 5:
+            t_time += ":00"
+        ts = f"{target_date} {t_time}"
+
+    if items and len(items) > 0:
+        raw_text = raw_input or ", ".join([f"{i.get('product_name')} {int(i.get('quantity_g', 100))}г" for i in items])
+        return save_meal(
+            raw_input=raw_text,
+            input_type="manual",
+            items=items,
+            meal_type=meal_type,
+            custom_timestamp=ts
+        )
+
+    if raw_input:
+        from agents.ingestion_agent import ingestion_agent
+        from agents.nutrition_agent import nutrition_agent
+        from agents.auditor_agent import auditor_agent
+
+        parsed_items = ingestion_agent.parse_input(raw_input)
+        if not parsed_items:
+            parsed_items = [{"product_name": raw_input.strip(), "quantity_g": 100}]
+        
+        calculated_items = nutrition_agent.calculate(parsed_items)
+        audited_items = auditor_agent.audit(calculated_items)
+
+        return save_meal(
+            raw_input=raw_input,
+            input_type="text",
+            items=audited_items,
+            meal_type=meal_type,
+            custom_timestamp=ts
+        )
+
+    return 0
 
 def clear_recent_meals(limit: int = 5) -> int:
     """Deletes the last N meals from SQLite and Supabase."""

@@ -9,7 +9,8 @@ from database.db import (
     get_today_summary, get_recent_meals, get_product_prices, get_meals_for_days,
     get_recent_recommendations, save_user_weight_and_goals,
     save_product_price, update_product_price, delete_product_entry,
-    estimate_product_nutrition
+    estimate_product_nutrition, delete_meal_item, update_meal_item,
+    add_meal_entry, delete_meal
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,14 +26,18 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
 
     def _read_body_json(self) -> dict:
+        if hasattr(self, '_cached_body'):
+            return self._cached_body
         try:
             content_length = int(self.headers.get('Content-Length', 0))
             if content_length > 0:
                 body = self.rfile.read(content_length).decode('utf-8')
-                return json.loads(body)
+                self._cached_body = json.loads(body)
+                return self._cached_body
         except Exception:
             pass
-        return {}
+        self._cached_body = {}
+        return self._cached_body
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -313,6 +318,121 @@ class handler(BaseHTTPRequestHandler):
                 self._send_json(400, {"status": "error", "message": str(e)})
                 return
 
+        # Handle Meals CRUD
+        if path in ['/api/meals', '/api/meals/add', '/api/meals/update', '/api/meals/delete']:
+            try:
+                data = self._read_body_json()
+                action = data.get("action", "")
+                if path.endswith("/add"):
+                    action = "add"
+                elif path.endswith("/update"):
+                    action = "update"
+                elif path.endswith("/delete"):
+                    action = "delete"
+                elif not action:
+                    action = "add"
+
+                target_date = data.get("date")
+
+                if action == "delete":
+                    item_id = data.get("item_id") or data.get("id")
+                    meal_id = data.get("meal_id")
+                    if item_id:
+                        delete_meal_item(int(item_id))
+                    elif meal_id:
+                        delete_meal(int(meal_id))
+                    else:
+                        self._send_json(400, {"status": "error", "message": "Не указан item_id или meal_id для удаления"})
+                        return
+
+                    self._render_dashboard_cache()
+                    from database.db import get_product_price_map
+                    price_map = get_product_price_map()
+                    summary = get_today_summary(target_date, price_map=price_map)
+                    meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map)
+                    self._send_json(200, {
+                        "status": "success",
+                        "message": "Прием пищи / продукт успешно удален",
+                        "summary": summary,
+                        "meals": meals
+                    })
+                    return
+
+                elif action == "update":
+                    item_id = data.get("item_id") or data.get("id")
+                    if not item_id:
+                        self._send_json(400, {"status": "error", "message": "Не указан ID записи (item_id)"})
+                        return
+
+                    p_name = (data.get("product_name") or "").strip()
+                    quantity_g = float(data.get("quantity_g") or data.get("weight_g") or 100.0)
+                    calories = float(data.get("calories") or 0.0)
+                    protein_g = float(data.get("protein_g") or data.get("protein") or 0.0)
+                    fat_g = float(data.get("fat_g") or data.get("fat") or 0.0)
+                    carbs_g = float(data.get("carbs_g") or data.get("carbs") or 0.0)
+                    category = data.get("category", "general")
+                    meal_type = data.get("meal_type")
+                    timestamp = data.get("timestamp")
+
+                    updated_item = update_meal_item(
+                        item_id=int(item_id),
+                        product_name=p_name,
+                        quantity_g=quantity_g,
+                        calories=calories,
+                        protein_g=protein_g,
+                        fat_g=fat_g,
+                        carbs_g=carbs_g,
+                        category=category,
+                        meal_type=meal_type,
+                        timestamp=timestamp
+                    )
+
+                    self._render_dashboard_cache()
+                    from database.db import get_product_price_map
+                    price_map = get_product_price_map()
+                    summary = get_today_summary(target_date, price_map=price_map)
+                    meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map)
+                    self._send_json(200, {
+                        "status": "success",
+                        "message": "Запись приема пищи успешно обновлена",
+                        "item": updated_item,
+                        "summary": summary,
+                        "meals": meals
+                    })
+                    return
+
+                elif action == "add":
+                    meal_type = data.get("meal_type") or "Перекус"
+                    raw_input = data.get("raw_input")
+                    items = data.get("items")
+                    target_time = data.get("time")
+
+                    new_meal_id = add_meal_entry(
+                        meal_type=meal_type,
+                        items=items,
+                        raw_input=raw_input,
+                        target_date=target_date,
+                        target_time=target_time
+                    )
+
+                    self._render_dashboard_cache()
+                    from database.db import get_product_price_map
+                    price_map = get_product_price_map()
+                    summary = get_today_summary(target_date, price_map=price_map)
+                    meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map)
+                    self._send_json(200, {
+                        "status": "success",
+                        "message": f"Прием пищи ({meal_type}) успешно добавлен",
+                        "meal_id": new_meal_id,
+                        "summary": summary,
+                        "meals": meals
+                    })
+                    return
+
+            except Exception as e:
+                self._send_json(400, {"status": "error", "message": str(e)})
+                return
+
         self.send_response(404)
         self.end_headers()
         self.wfile.write(b'{"error": "Not Found"}')
@@ -325,6 +445,11 @@ class handler(BaseHTTPRequestHandler):
             data["action"] = "update"
             self.path = '/api/products/update'
             return self.do_POST()
+        if path in ['/api/meals']:
+            data = self._read_body_json()
+            data["action"] = "update"
+            self.path = '/api/meals/update'
+            return self.do_POST()
         self.send_response(404)
         self.end_headers()
         self.wfile.write(b'{"error": "Not Found"}')
@@ -336,6 +461,11 @@ class handler(BaseHTTPRequestHandler):
             data = self._read_body_json()
             data["action"] = "delete"
             self.path = '/api/products/delete'
+            return self.do_POST()
+        if path in ['/api/meals']:
+            data = self._read_body_json()
+            data["action"] = "delete"
+            self.path = '/api/meals/delete'
             return self.do_POST()
         self.send_response(404)
         self.end_headers()
