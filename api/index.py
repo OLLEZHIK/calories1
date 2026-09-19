@@ -10,10 +10,21 @@ from database.db import (
     get_recent_recommendations, save_user_weight_and_goals,
     save_product_price, update_product_price, delete_product_entry,
     estimate_product_nutrition, delete_meal_item, update_meal_item,
-    add_meal_entry, delete_meal
+    add_meal_entry, delete_meal,
+    # Auth functions
+    create_user, login_user, create_session, validate_session,
+    delete_session, get_users_count, get_user_by_id
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Routes that don't require authentication
+_PUBLIC_ROUTES = {
+    '/api/auth/login',
+    '/api/auth/register',
+    '/api/auth/check',
+}
+
 
 class handler(BaseHTTPRequestHandler):
     def _send_json(self, status_code: int, data: dict):
@@ -39,6 +50,28 @@ class handler(BaseHTTPRequestHandler):
         self._cached_body = {}
         return self._cached_body
 
+    def _get_token(self) -> str:
+        """Extracts Bearer token from Authorization header."""
+        auth_header = self.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            return auth_header[7:].strip()
+        return ''
+
+    def _require_auth(self) -> 'Optional[int]':
+        """
+        Validates the session token. Returns user_id (int) if authenticated.
+        Sends 401 and returns None if not authenticated.
+        """
+        token = self._get_token()
+        if not token:
+            self._send_json(401, {"error": "Требуется авторизация", "code": "NO_TOKEN"})
+            return None
+        user_id = validate_session(token)
+        if not user_id:
+            self._send_json(401, {"error": "Сессия истекла или недействительна. Войдите заново.", "code": "INVALID_TOKEN"})
+            return None
+        return user_id
+
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -50,8 +83,34 @@ class handler(BaseHTTPRequestHandler):
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path.rstrip('/')
 
+        # ── Auth check (public) ──────────────────────────────────────────────
+        if path == '/api/auth/check':
+            token = self._get_token()
+            if not token:
+                self._send_json(401, {"valid": False, "error": "No token"})
+                return
+            user_id = validate_session(token)
+            if not user_id:
+                self._send_json(401, {"valid": False, "error": "Session expired"})
+                return
+            user = get_user_by_id(user_id)
+            self._send_json(200, {
+                "valid": True,
+                "user_id": user_id,
+                "username": user["username"] if user else "unknown"
+            })
+            return
+
+        # ── All other API routes require auth ────────────────────────────────
+        if path.startswith('/api/'):
+            user_id = self._require_auth()
+            if user_id is None:
+                return
+        else:
+            user_id = 1  # Static file serving — no auth needed
+
         if path in ['/api/products']:
-            products = get_product_prices()
+            products = get_product_prices(user_id=user_id)
             self._send_json(200, {"status": "success", "products": products})
             return
 
@@ -61,9 +120,9 @@ class handler(BaseHTTPRequestHandler):
 
             from database.db import get_product_price_map
             price_map = get_product_price_map()
-            products = get_product_prices()
-            summary = get_today_summary(target_date, price_map=price_map)
-            meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map)
+            products = get_product_prices(user_id=user_id)
+            summary = get_today_summary(target_date, price_map=price_map, user_id=user_id)
+            meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map, user_id=user_id)
 
             # Fast coach recommendations from DB cache without waiting for Gemini LLM
             recent_recs = get_recent_recommendations(limit=6)
@@ -78,7 +137,7 @@ class handler(BaseHTTPRequestHandler):
                     {"topic": "Водный баланс", "severity": "tip", "message": "Пейте достаточное количество чистой воды между приёмами пищи."}
                 ]
             coach = {"summary": summary, "recommendations": coach_tips[:3]}
-            
+
             # Generate dynamic live telemetry logs for the 6 agents
             telemetry = []
             for m in meals[:5]:
@@ -93,43 +152,28 @@ class handler(BaseHTTPRequestHandler):
                 prod_names = ", ".join([i.get("product_name", "") for i in items[:3]])
 
                 telemetry.append({
-                    "timestamp": ts,
-                    "agent": "TeamLeadAgent",
-                    "tag": "ROUTE_OK",
-                    "level": "ok",
+                    "timestamp": ts, "agent": "TeamLeadAgent", "tag": "ROUTE_OK", "level": "ok",
                     "message": f"Входное сообщение: '{raw[:50]}...'. Запрос передан в конвейер обработки."
                 })
                 telemetry.append({
-                    "timestamp": ts,
-                    "agent": "IngestionAgent",
-                    "tag": "LLM_PARSE",
-                    "level": "ok",
+                    "timestamp": ts, "agent": "IngestionAgent", "tag": "LLM_PARSE", "level": "ok",
                     "message": f"Распознано продуктов ({len(items)} шт): {prod_names}."
                 })
                 telemetry.append({
-                    "timestamp": ts,
-                    "agent": "NutritionAgent",
-                    "tag": "CALC_MACROS",
-                    "level": "ok",
+                    "timestamp": ts, "agent": "NutritionAgent", "tag": "CALC_MACROS", "level": "ok",
                     "message": f"Расчитано для {m_type}: {tot_cal} ккал (Б:{tot_p}g, Ж:{tot_f}g, У:{tot_c}g)."
                 })
                 telemetry.append({
-                    "timestamp": ts,
-                    "agent": "AuditorAgent",
-                    "tag": "AUDIT_PASS",
-                    "level": "ok",
-                    "message": f"Проверка энергетического баланса (4P+9F+4C) пройдна. Фильтрация несъедобных терминов OK."
+                    "timestamp": ts, "agent": "AuditorAgent", "tag": "AUDIT_PASS", "level": "ok",
+                    "message": "Проверка энергетического баланса (4P+9F+4C) пройдна. Фильтрация несъедобных терминов OK."
                 })
                 telemetry.append({
-                    "timestamp": ts,
-                    "agent": "DashboardAgent",
-                    "tag": "SYNC_SUPABASE",
-                    "level": "ok",
+                    "timestamp": ts, "agent": "DashboardAgent", "tag": "SYNC_SUPABASE", "level": "ok",
                     "message": f"Запись #{m.get('id')} ({m_type}) синхронизирована с Supabase Cloud и Веб-дашбордом."
                 })
 
             # Also get history for the last 7 days for the chart
-            history_meals = get_meals_for_days(7)
+            history_meals = get_meals_for_days(7, user_id=user_id)
             history_summary = {}
             for m in history_meals:
                 d = (m.get("timestamp") or "")[:10]
@@ -176,6 +220,73 @@ class handler(BaseHTTPRequestHandler):
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path.rstrip('/')
 
+        # ── Auth routes (PUBLIC — no token required) ─────────────────────────
+
+        if path == '/api/auth/register':
+            try:
+                data = self._read_body_json()
+                username = (data.get("username") or "").strip()
+                password = (data.get("password") or "").strip()
+                if not username or not password:
+                    self._send_json(400, {"error": "Введите логин и пароль"})
+                    return
+                # Only allow registration if no users exist yet
+                count = get_users_count()
+                if count > 0:
+                    self._send_json(403, {"error": "Регистрация закрыта. Обратитесь к администратору."})
+                    return
+                user = create_user(username, password)
+                device_name = self.headers.get('User-Agent', '')[:200]
+                token = create_session(user["user_id"], device_name=device_name)
+                self._send_json(200, {
+                    "status": "success",
+                    "message": f"Аккаунт «{username}» создан!",
+                    "token": token,
+                    "username": username,
+                    "user_id": user["user_id"]
+                })
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
+        if path == '/api/auth/login':
+            try:
+                data = self._read_body_json()
+                username = (data.get("username") or "").strip()
+                password = (data.get("password") or "").strip()
+                if not username or not password:
+                    self._send_json(400, {"error": "Введите логин и пароль"})
+                    return
+                user = login_user(username, password)
+                if not user:
+                    self._send_json(401, {"error": "Неверный логин или пароль"})
+                    return
+                device_name = self.headers.get('User-Agent', '')[:200]
+                token = create_session(user["user_id"], device_name=device_name)
+                self._send_json(200, {
+                    "status": "success",
+                    "token": token,
+                    "username": user["username"],
+                    "user_id": user["user_id"]
+                })
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+            return
+
+        if path == '/api/auth/logout':
+            token = self._get_token()
+            if token:
+                delete_session(token)
+            self._send_json(200, {"status": "success", "message": "Выход выполнен"})
+            return
+
+        # ── All other POST routes require auth ───────────────────────────────
+        user_id = self._require_auth()
+        if user_id is None:
+            return
+
         if path in ['/api/goals', '/api/weight']:
             try:
                 data = self._read_body_json()
@@ -190,8 +301,8 @@ class handler(BaseHTTPRequestHandler):
                 if weight_goal is not None:
                     weight_goal = float(weight_goal)
 
-                updated_goals = save_user_weight_and_goals(weight, mode=mode, weight_goal=weight_goal)
-                summary = get_today_summary()
+                updated_goals = save_user_weight_and_goals(weight, mode=mode, weight_goal=weight_goal, user_id=user_id)
+                summary = get_today_summary(user_id=user_id)
 
                 payload = {
                     "status": "success",
@@ -230,9 +341,9 @@ class handler(BaseHTTPRequestHandler):
                 elif action == "delete":
                     p_id = data.get("id") or data.get("product_id")
                     p_name = data.get("product_name")
-                    delete_product_entry(product_name=p_name, product_id=int(p_id) if p_id else None)
+                    delete_product_entry(product_name=p_name, product_id=int(p_id) if p_id else None, user_id=user_id)
                     self._render_dashboard_cache()
-                    products = get_product_prices()
+                    products = get_product_prices(user_id=user_id)
                     self._send_json(200, {
                         "status": "success",
                         "message": "Продукт успешно удален",
@@ -254,10 +365,11 @@ class handler(BaseHTTPRequestHandler):
                         carbs_100g=float(data.get("carbs_per_100g") or data.get("carbs_100g") or 0.0),
                         calories_100g=float(data.get("calories_per_100g") or data.get("calories_100g") or 0.0),
                         coach_score=int(data.get("coach_score") or 0),
-                        coach_verdict=data.get("coach_verdict", "")
+                        coach_verdict=data.get("coach_verdict", ""),
+                        user_id=user_id
                     )
                     self._render_dashboard_cache()
-                    products = get_product_prices()
+                    products = get_product_prices(user_id=user_id)
                     self._send_json(200, {
                         "status": "success",
                         "message": "Продукт успешно обновлен",
@@ -303,10 +415,11 @@ class handler(BaseHTTPRequestHandler):
                         carbs_100g=c_val,
                         calories_100g=cal_val,
                         coach_score=score_val,
-                        coach_verdict=verdict_val
+                        coach_verdict=verdict_val,
+                        user_id=user_id
                     )
                     self._render_dashboard_cache()
-                    products = get_product_prices()
+                    products = get_product_prices(user_id=user_id)
                     self._send_json(200, {
                         "status": "success",
                         "message": f"Продукт «{p_name}» успешно добавлен",
@@ -348,8 +461,8 @@ class handler(BaseHTTPRequestHandler):
                     self._render_dashboard_cache()
                     from database.db import get_product_price_map
                     price_map = get_product_price_map()
-                    summary = get_today_summary(target_date, price_map=price_map)
-                    meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map)
+                    summary = get_today_summary(target_date, price_map=price_map, user_id=user_id)
+                    meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map, user_id=user_id)
                     self._send_json(200, {
                         "status": "success",
                         "message": "Прием пищи / продукт успешно удален",
@@ -390,8 +503,8 @@ class handler(BaseHTTPRequestHandler):
                     self._render_dashboard_cache()
                     from database.db import get_product_price_map
                     price_map = get_product_price_map()
-                    summary = get_today_summary(target_date, price_map=price_map)
-                    meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map)
+                    summary = get_today_summary(target_date, price_map=price_map, user_id=user_id)
+                    meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map, user_id=user_id)
                     self._send_json(200, {
                         "status": "success",
                         "message": "Запись приема пищи успешно обновлена",
@@ -412,14 +525,15 @@ class handler(BaseHTTPRequestHandler):
                         items=items,
                         raw_input=raw_input,
                         target_date=target_date,
-                        target_time=target_time
+                        target_time=target_time,
+                        user_id=user_id
                     )
 
                     self._render_dashboard_cache()
                     from database.db import get_product_price_map
                     price_map = get_product_price_map()
-                    summary = get_today_summary(target_date, price_map=price_map)
-                    meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map)
+                    summary = get_today_summary(target_date, price_map=price_map, user_id=user_id)
+                    meals = get_recent_meals(limit=10, target_date=target_date, price_map=price_map, user_id=user_id)
                     self._send_json(200, {
                         "status": "success",
                         "message": f"Прием пищи ({meal_type}) успешно добавлен",

@@ -434,9 +434,138 @@ a{color:inherit}
   from{opacity:0; transform:translateY(12px);}
   to{opacity:1; transform:translateY(0);}
 }
+
+/* ═══ Auth / Login Overlay ═══════════════════════════════════════════════ */
+#auth-overlay{
+  position:fixed; inset:0; z-index:99999;
+  background:var(--paper);
+  display:flex; align-items:center; justify-content:center;
+  animation:fadeIn 0.25s ease-out;
+}
+#auth-overlay.hidden{ display:none; }
+@keyframes fadeIn{ from{opacity:0;} to{opacity:1;} }
+
+.login-card{
+  background:var(--panel); border:1px solid var(--hair);
+  border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.12);
+  padding:40px 36px; width:100%; max-width:400px;
+  font-family:"Golos Text",sans-serif;
+}
+.login-logo{
+  text-align:center; margin-bottom:28px;
+}
+.login-logo .emoji{ font-size:40px; display:block; margin-bottom:8px; }
+.login-logo h1{
+  font-family:"Oswald",sans-serif; font-size:22px; font-weight:700;
+  color:var(--ink); margin:0 0 4px;
+}
+.login-logo p{ font-size:12px; color:var(--ink-3); margin:0; }
+
+.login-tabs{
+  display:flex; gap:0; border:1px solid var(--hair); border-radius:8px;
+  overflow:hidden; margin-bottom:24px;
+}
+.login-tab-btn{
+  flex:1; background:transparent; border:none; padding:9px 0;
+  font-family:"Golos Text",sans-serif; font-size:13px; font-weight:600;
+  color:var(--ink-3); cursor:pointer; transition:all .15s;
+}
+.login-tab-btn.active{
+  background:var(--ink); color:#fff;
+}
+
+.login-form-group{ margin-bottom:16px; }
+.login-form-group label{
+  display:block; font-size:12px; font-weight:600; color:var(--ink-2);
+  margin-bottom:6px; text-transform:uppercase; letter-spacing:.04em;
+}
+.login-form-group input{
+  width:100%; box-sizing:border-box;
+  padding:11px 14px; border:1.5px solid var(--hair); border-radius:8px;
+  font-family:"Golos Text",sans-serif; font-size:15px; color:var(--ink);
+  background:var(--paper); outline:none; transition:border-color .15s;
+}
+.login-form-group input:focus{ border-color:var(--p); }
+
+.login-error{
+  background:var(--crit-bg); border:1px solid var(--crit);
+  border-radius:6px; padding:9px 12px; font-size:13px; color:var(--crit);
+  font-weight:600; margin-bottom:16px; display:none;
+}
+.login-btn{
+  width:100%; padding:13px; background:var(--ink); color:#fff;
+  border:none; border-radius:8px; font-family:"Golos Text",sans-serif;
+  font-size:15px; font-weight:700; cursor:pointer; transition:opacity .15s;
+  margin-top:4px;
+}
+.login-btn:hover{ opacity:0.88; }
+.login-btn:disabled{ opacity:0.5; cursor:not-allowed; }
+
+/* Logout button in header */
+.btn-logout{
+  background:transparent; border:1px solid var(--hair); border-radius:6px;
+  padding:5px 12px; font-family:"Golos Text",sans-serif; font-size:12px;
+  font-weight:600; color:var(--ink-2); cursor:pointer; transition:all .15s;
+  display:flex; align-items:center; gap:5px;
+}
+.btn-logout:hover{ border-color:var(--crit); color:var(--crit); }
 </style>
+
 </head>
 <body>
+
+<!-- ═══ Auth Login Overlay ═══════════════════════════════════════════════════ -->
+<div id="auth-overlay">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="emoji">🥗</span>
+      <h1>Дневник калорий</h1>
+      <p>Мультиагентная система ИИ</p>
+    </div>
+
+    <!-- Tab switcher: Login / Register -->
+    <div class="login-tabs" id="login-tabs">
+      <button class="login-tab-btn active" id="tab-btn-login" onclick="switchLoginTab('login')">Войти</button>
+      <button class="login-tab-btn" id="tab-btn-register" onclick="switchLoginTab('register')" style="display:none;" id="tab-btn-register">Создать аккаунт</button>
+    </div>
+
+    <div id="login-error" class="login-error"></div>
+
+    <!-- Login form -->
+    <div id="login-panel">
+      <div class="login-form-group">
+        <label>Логин</label>
+        <input type="text" id="login-username" placeholder="Ваш логин" autocomplete="username" oninput="clearLoginError()">
+      </div>
+      <div class="login-form-group">
+        <label>Пароль</label>
+        <input type="password" id="login-password" placeholder="Ваш пароль" autocomplete="current-password"
+               oninput="clearLoginError()" onkeydown="if(event.key==='Enter') doLogin()">
+      </div>
+      <button class="login-btn" id="login-btn" onclick="doLogin()">Войти →</button>
+    </div>
+
+    <!-- Register form (only shown if no users exist) -->
+    <div id="register-panel" style="display:none;">
+      <div class="login-form-group">
+        <label>Придумайте логин</label>
+        <input type="text" id="reg-username" placeholder="например: vital" autocomplete="username" oninput="clearLoginError()">
+      </div>
+      <div class="login-form-group">
+        <label>Придумайте пароль (минимум 4 символа)</label>
+        <input type="password" id="reg-password" placeholder="Надёжный пароль" autocomplete="new-password"
+               oninput="clearLoginError()" onkeydown="if(event.key==='Enter') doRegister()">
+      </div>
+      <div class="login-form-group">
+        <label>Повторите пароль</label>
+        <input type="password" id="reg-password2" placeholder="Повторите пароль" autocomplete="new-password"
+               oninput="clearLoginError()" onkeydown="if(event.key==='Enter') doRegister()">
+      </div>
+      <button class="login-btn" id="register-btn" onclick="doRegister()">Создать аккаунт →</button>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
 
   <header class="masthead">
@@ -445,11 +574,16 @@ a{color:inherit}
       <h1>Дневник калорий</h1>
     </div>
     <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span id="hdr-username" style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--ink-2); font-weight:500;"></span>
+        <button class="btn-logout" onclick="doLogout()" title="Выйти из аккаунта">↩ Выйти</button>
+      </div>
       <p class="sub">Автоматический учет питания, калорий, БЖУ и рекомендаций ИИ-тренера в реальном времени</p>
       <a href="/agents" style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--p); font-weight:600; text-decoration:none">🔍 Логи и мониторинг ИИ-Агентов →</a>
     </div>
   </header>
   <hr class="rule-heavy">
+
 
   <!-- Day Strip Calendar -->
   <div class="daystrip" id="daystrip-container">
@@ -963,6 +1097,16 @@ a{color:inherit}
 </div>
 
 <script>
+const API_BASE = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
+
+function authHeaders() {
+  const token = localStorage.getItem('auth_token') || '';
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': token ? `Bearer ${token}` : ''
+  };
+}
+
 window.INITIAL_DATA = null;
 let currentDate = new Date().toISOString().split('T')[0];
 let currentWeight = 76.0;
@@ -1093,16 +1237,20 @@ async function saveWeightAndGoals() {
   }
 
   try {
-    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
-    const res = await fetch(`${apiBase}/api/goals`, {
+    const res = await fetch(`${API_BASE}/api/goals`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
         weight_current: currentWeight,
         goal_mode: currentGoalMode,
         weight_goal: currentWeightGoal
       })
     });
+    if (res.status === 401) {
+      localStorage.removeItem('auth_token');
+      showLoginOverlay();
+      return;
+    }
     if (res.ok) {
       const data = await res.json();
       if (data.goals) {
@@ -1136,8 +1284,14 @@ async function saveWeightAndGoals() {
 async function loadLiveDashboard(dateParam = null) {
   if (dateParam) currentDate = dateParam;
   try {
-    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
-    const res = await fetch(`${apiBase}/api/summary?date=${currentDate}`);
+    const res = await fetch(`${API_BASE}/api/summary?date=${currentDate}`, {
+      headers: authHeaders()
+    });
+    if (res.status === 401) {
+      localStorage.removeItem('auth_token');
+      showLoginOverlay();
+      return;
+    }
     if (res.ok) {
       const data = await res.json();
       try {
@@ -1499,15 +1653,19 @@ async function estimateNutritionFromAI() {
   btn.innerText = '⏳...';
 
   try {
-    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
-    const res = await fetch(`${apiBase}/api/products/estimate`, {
+    const res = await fetch(`${API_BASE}/api/products/estimate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
         product_name: name,
         category: document.getElementById('prod-category-select').value
       })
     });
+    if (res.status === 401) {
+      localStorage.removeItem('auth_token');
+      showLoginOverlay();
+      return;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.data) {
@@ -1567,13 +1725,17 @@ async function saveProductFromModal() {
   btnSave.innerText = '⏳ Сохранение...';
 
   try {
-    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
     const endpoint = isEdit ? '/api/products/update' : '/api/products/add';
-    const res = await fetch(`${apiBase}${endpoint}`, {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify(payload)
     });
+    if (res.status === 401) {
+      localStorage.removeItem('auth_token');
+      showLoginOverlay();
+      return;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
@@ -1614,15 +1776,19 @@ async function confirmDeleteProduct() {
   btn.innerText = '⏳ Удаление...';
 
   try {
-    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
-    const res = await fetch(`${apiBase}/api/products/delete`, {
+    const res = await fetch(`${API_BASE}/api/products/delete`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
         product_name: p.product_name,
         id: p.id
       })
     });
+    if (res.status === 401) {
+      localStorage.removeItem('auth_token');
+      showLoginOverlay();
+      return;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
@@ -1840,9 +2006,9 @@ async function saveMealFromModal() {
       const c = parseFloat(document.getElementById('meal-c-input').value) || 0;
       const cat = document.getElementById('meal-prod-cat-select').value;
 
-      const res = await fetch(`${apiBase}/api/meals/update`, {
+      const res = await fetch(`${API_BASE}/api/meals/update`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({
           item_id: parseInt(itemId),
           product_name: prodName,
@@ -1856,6 +2022,11 @@ async function saveMealFromModal() {
           date: targetDate
         })
       });
+      if (res.status === 401) {
+        localStorage.removeItem('auth_token');
+        showLoginOverlay();
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       closeMealModal();
@@ -1904,11 +2075,16 @@ async function saveMealFromModal() {
         }];
       }
 
-      const res = await fetch(`${apiBase}/api/meals/add`, {
+      const res = await fetch(`${API_BASE}/api/meals/add`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(payload)
       });
+      if (res.status === 401) {
+        localStorage.removeItem('auth_token');
+        showLoginOverlay();
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       closeMealModal();
@@ -1943,15 +2119,19 @@ async function confirmDeleteMealItem() {
   btn.innerText = '⏳ Удаление...';
 
   try {
-    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
-    const res = await fetch(`${apiBase}/api/meals/delete`, {
+    const res = await fetch(`${API_BASE}/api/meals/delete`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
         item_id: mealItemToDelete.id,
         date: currentDate
       })
     });
+    if (res.status === 401) {
+      localStorage.removeItem('auth_token');
+      showLoginOverlay();
+      return;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     closeDeleteMealModal();
@@ -1988,8 +2168,220 @@ try {
 } catch(e) {
   if (window.INITIAL_DATA) updateUI(window.INITIAL_DATA);
 }
-loadLiveDashboard();
-setInterval(() => loadLiveDashboard(currentDate), 30000);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AUTH SYSTEM — Login / Register / Logout
+   Token stored in localStorage.auth_token (30-day session)
+═══════════════════════════════════════════════════════════════════════════ */
+
+const API_BASE = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
+
+/** Returns fetch headers with Authorization Bearer token */
+function authHeaders() {
+  const token = localStorage.getItem('auth_token') || '';
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': token ? `Bearer ${token}` : ''
+  };
+}
+
+function showLoginOverlay() {
+  document.getElementById('auth-overlay').classList.remove('hidden');
+  setTimeout(() => {
+    const inp = document.getElementById('login-username');
+    if (inp) inp.focus();
+  }, 100);
+}
+
+function hideLoginOverlay() {
+  document.getElementById('auth-overlay').classList.add('hidden');
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.innerText = msg;
+  el.style.display = 'block';
+}
+
+function clearLoginError() {
+  const el = document.getElementById('login-error');
+  if (el) el.style.display = 'none';
+}
+
+function switchLoginTab(tab) {
+  const loginPanel = document.getElementById('login-panel');
+  const registerPanel = document.getElementById('register-panel');
+  document.getElementById('tab-btn-login').classList.toggle('active', tab === 'login');
+  document.getElementById('tab-btn-register').classList.toggle('active', tab === 'register');
+  loginPanel.style.display = tab === 'login' ? 'block' : 'none';
+  registerPanel.style.display = tab === 'register' ? 'block' : 'none';
+  clearLoginError();
+}
+
+/** Check on load: if token valid → show dashboard, else show login overlay */
+async function checkAuth() {
+  const token = localStorage.getItem('auth_token');
+
+  if (!token) {
+    // No token — check if first-time setup (no users)
+    await checkFirstTimeSetup();
+    showLoginOverlay();
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/check`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.valid) {
+        window._CURRENT_USER = { user_id: data.user_id, username: data.username };
+        const hdrUsername = document.getElementById('hdr-username');
+        if (hdrUsername) hdrUsername.innerText = `👤 ${data.username}`;
+        hideLoginOverlay();
+        loadLiveDashboard();
+        setInterval(() => loadLiveDashboard(currentDate), 30000);
+        return;
+      }
+    }
+  } catch(e) {
+    console.warn('Auth check error:', e);
+  }
+
+  // Token invalid or expired
+  localStorage.removeItem('auth_token');
+  await checkFirstTimeSetup();
+  showLoginOverlay();
+}
+
+/** If no users exist yet, show the Register tab automatically */
+async function checkFirstTimeSetup() {
+  try {
+    // We use /api/auth/check to detect if this is a fresh setup by trying an empty token
+    // Instead, we look at a simple signal: if login fails with "user not found" vs "wrong password"
+    // For the first-time setup, show register tab if register button is visible
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: '__probe__', password: '__probe__' })
+    });
+    const data = await res.json();
+    // Server returns 403 on register if users exist, so we try register probe:
+    const regRes = await fetch(`${API_BASE}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: '__probe__', password: '____' })
+    });
+    const regData = await regRes.json();
+    // If register is allowed (not 403), show Register tab
+    if (regRes.status !== 403) {
+      const regBtn = document.getElementById('tab-btn-register');
+      if (regBtn) regBtn.style.display = '';
+      switchLoginTab('register');
+    }
+  } catch(e) {}
+}
+
+async function doLogin() {
+  const username = (document.getElementById('login-username').value || '').trim();
+  const password = (document.getElementById('login-password').value || '').trim();
+  if (!username || !password) {
+    showLoginError('Введите логин и пароль');
+    return;
+  }
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.innerText = '⏳ Вход...';
+
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (res.ok && data.token) {
+      localStorage.setItem('auth_token', data.token);
+      window._CURRENT_USER = { user_id: data.user_id, username: data.username };
+      const hdrUsername = document.getElementById('hdr-username');
+      if (hdrUsername) hdrUsername.innerText = `👤 ${data.username}`;
+      hideLoginOverlay();
+      loadLiveDashboard();
+      setInterval(() => loadLiveDashboard(currentDate), 30000);
+    } else {
+      showLoginError(data.error || 'Неверный логин или пароль');
+    }
+  } catch(e) {
+    showLoginError('Ошибка соединения. Попробуйте ещё раз.');
+  } finally {
+    btn.disabled = false;
+    btn.innerText = 'Войти →';
+  }
+}
+
+async function doRegister() {
+  const username = (document.getElementById('reg-username').value || '').trim();
+  const password = (document.getElementById('reg-password').value || '').trim();
+  const password2 = (document.getElementById('reg-password2').value || '').trim();
+  if (!username || !password) {
+    showLoginError('Заполните все поля');
+    return;
+  }
+  if (password !== password2) {
+    showLoginError('Пароли не совпадают');
+    return;
+  }
+  if (password.length < 4) {
+    showLoginError('Пароль должен быть не менее 4 символов');
+    return;
+  }
+  const btn = document.getElementById('register-btn');
+  btn.disabled = true;
+  btn.innerText = '⏳ Создание аккаунта...';
+
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (res.ok && data.token) {
+      localStorage.setItem('auth_token', data.token);
+      window._CURRENT_USER = { user_id: data.user_id, username: data.username };
+      const hdrUsername = document.getElementById('hdr-username');
+      if (hdrUsername) hdrUsername.innerText = `👤 ${data.username}`;
+      hideLoginOverlay();
+      showToast(`🎉 Добро пожаловать, ${data.username}!`);
+      loadLiveDashboard();
+      setInterval(() => loadLiveDashboard(currentDate), 30000);
+    } else {
+      showLoginError(data.error || 'Ошибка при создании аккаунта');
+    }
+  } catch(e) {
+    showLoginError('Ошибка соединения. Попробуйте ещё раз.');
+  } finally {
+    btn.disabled = false;
+    btn.innerText = 'Создать аккаунт →';
+  }
+}
+
+async function doLogout() {
+  try {
+    await fetch(`${API_BASE}/api/auth/logout`, {
+      method: 'POST',
+      headers: authHeaders()
+    });
+  } catch(e) {}
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('cached_dashboard_' + currentDate);
+  window._CURRENT_USER = null;
+  showLoginOverlay();
+}
+
+// ── Start auth check on page load ───────────────────────────────────────────
+checkAuth();
 </script>
 </body>
 </html>

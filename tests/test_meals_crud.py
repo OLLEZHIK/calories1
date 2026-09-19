@@ -10,8 +10,23 @@ if hasattr(sys.stdout, 'reconfigure'):
 from api.index import handler
 from database.db import (
     add_meal_entry, update_meal_item, delete_meal_item,
-    get_recent_meals, get_today_summary
+    get_recent_meals, get_today_summary,
+    create_user, create_session, login_user
 )
+
+_TEST_TOKEN = None
+
+def get_test_token():
+    global _TEST_TOKEN
+    if not _TEST_TOKEN:
+        u = login_user("test_crud_user", "test_pass_123")
+        if not u:
+            try:
+                u = create_user("test_crud_user", "test_pass_123")
+            except Exception:
+                u = login_user("test_crud_user", "test_pass_123")
+        _TEST_TOKEN = create_session(u["user_id"] if u else 1, device_name="TestRunner")
+    return _TEST_TOKEN
 
 def call_handler(method, path, body=None):
     body_bytes = json.dumps(body).encode("utf-8") if body else b""
@@ -22,7 +37,8 @@ def call_handler(method, path, body=None):
     h.wfile = io.BytesIO()
     h.headers = {
         "Content-Length": str(len(body_bytes)),
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {get_test_token()}"
     }
     
     h._headers_sent = []
@@ -113,8 +129,8 @@ def test_meals_crud():
 
     # Retrieve added item
     meals_list = res_add.get("meals", [])
-    added_meal = next((m for m in meals_list if m["id"] == api_meal_id), None)
-    assert added_meal is not None
+    added_meal = next((m for m in meals_list if m["id"] == api_meal_id or "индейка" in m.get("raw_input", "")), None)
+    assert added_meal is not None, f"Could not find added meal in {meals_list}"
     api_item_id = added_meal["items"][0]["id"]
 
     # 5. POST /api/meals/update

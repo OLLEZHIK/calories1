@@ -2,6 +2,8 @@ import sqlite3
 import json
 import re
 import time
+import hashlib
+import uuid
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -112,6 +114,52 @@ def init_db():
             conn.commit()
         except sqlite3.OperationalError:
             pass
+
+        # Create users table for authentication
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    salt TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        # Create sessions table for token-based auth
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    token TEXT UNIQUE NOT NULL,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    device_name TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    expires_at DATETIME NOT NULL,
+                    last_used DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        # Add user_id to existing tables for multi-user support
+        for alter_sql in [
+            "ALTER TABLE meals ADD COLUMN user_id INTEGER",
+            "ALTER TABLE product_prices ADD COLUMN user_id INTEGER",
+            "ALTER TABLE user_goals ADD COLUMN user_id INTEGER",
+            "ALTER TABLE coach_recommendations ADD COLUMN user_id INTEGER",
+            "ALTER TABLE weight_log ADD COLUMN user_id INTEGER",
+        ]:
+            try:
+                conn.execute(alter_sql)
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # Column already exists
 
 
 def stem_product_word(w: str) -> str:
@@ -329,23 +377,23 @@ def get_bot_session_mode(chat_id: int) -> Optional[str]:
         row = conn.execute("SELECT mode FROM bot_sessions WHERE chat_id = ?", (chat_id,)).fetchone()
     return row["mode"] if row else None
 
-def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal_type: str = "Прием пищи", custom_timestamp: Optional[str] = None) -> int:
+def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal_type: str = "Прием пищи", custom_timestamp: Optional[str] = None, user_id: int = 1) -> int:
     """
     Saves a raw meal log and its parsed/calculated items into SQLite and Supabase Cloud DB.
-    Supports explicit custom_timestamp (e.g. 'YYYY-MM-DD HH:MM:SS').
+    Supports explicit custom_timestamp (e.g. 'YYYY-MM-DD HH:MM:SS') and user_id.
     """
     meal_id = 0
     with get_connection() as conn:
         cursor = conn.cursor()
         if custom_timestamp:
             cursor.execute(
-                "INSERT INTO meals (raw_input, input_type, notes, timestamp) VALUES (?, ?, ?, ?)",
-                (raw_input, input_type, meal_type, custom_timestamp)
+                "INSERT INTO meals (raw_input, input_type, notes, timestamp, user_id) VALUES (?, ?, ?, ?, ?)",
+                (raw_input, input_type, meal_type, custom_timestamp, user_id)
             )
         else:
             cursor.execute(
-                "INSERT INTO meals (raw_input, input_type, notes) VALUES (?, ?, ?)",
-                (raw_input, input_type, meal_type)
+                "INSERT INTO meals (raw_input, input_type, notes, user_id) VALUES (?, ?, ?, ?)",
+                (raw_input, input_type, meal_type, user_id)
             )
         meal_id = cursor.lastrowid
 
@@ -374,12 +422,18 @@ def save_meal(raw_input: str, input_type: str, items: List[Dict[str, Any]], meal
             meal_data = {
                 "raw_input": raw_input,
                 "input_type": input_type,
-                "notes": meal_type
+                "notes": meal_type,
+                "user_id": user_id
             }
             if custom_timestamp:
                 meal_data["timestamp"] = custom_timestamp
 
             sp_meal = supabase_request("meals", method="POST", data=meal_data)
+            if sp_meal is None and "user_id" in meal_data:
+                # Retry without user_id if column not yet added to Supabase schema
+                meal_data.pop("user_id", None)
+                sp_meal = supabase_request("meals", method="POST", data=meal_data)
+
             if sp_meal and isinstance(sp_meal, list) and len(sp_meal) > 0:
                 sp_id = sp_meal[0].get("id")
                 if sp_id:
@@ -462,9 +516,10 @@ def calculate_nutrition_goals(weight_current: float, mode: str = "loss_300", wei
         "energy_check": f"4×{p} + 9×{f} + 4×{c} = {final_cal} ккал"
     }
 
-def get_user_goals() -> Dict[str, Any]:
-    """Returns the user's active goals, current weight, and goal mode (cached 60s)."""
-    cached = cache_get("user_goals", ttl=60.0)
+def get_user_goals(user_id: int = 1) -> Dict[str, Any]:
+    """Returns the user's active goals, current weight, and goal mode (cached 60s per user)."""
+    cache_key = f"user_goals_{user_id}"
+    cached = cache_get(cache_key, ttl=60.0)
     if cached is not None:
         return cached
 
@@ -475,7 +530,10 @@ def get_user_goals() -> Dict[str, Any]:
     # Try local sqlite first
     try:
         with get_connection() as conn:
-            row = conn.execute("SELECT * FROM user_goals ORDER BY id DESC LIMIT 1").fetchone()
+            row = conn.execute(
+                "SELECT * FROM user_goals WHERE (user_id = ? OR (user_id IS NULL AND ? = 1)) ORDER BY id DESC LIMIT 1",
+                (user_id, user_id)
+            ).fetchone()
             if row:
                 keys = row.keys()
                 if "weight_current" in keys and row["weight_current"] is not None:
@@ -490,14 +548,18 @@ def get_user_goals() -> Dict[str, Any]:
     # Check Supabase if active
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            sp_goals = supabase_request("user_goals?select=*&order=id.desc&limit=1")
+            url = f"user_goals?user_id=eq.{user_id}&order=id.desc&limit=1" if user_id != 1 else "user_goals?select=*&order=id.desc&limit=1"
+            sp_goals = supabase_request(url)
             if sp_goals and isinstance(sp_goals, list) and len(sp_goals) > 0:
                 g = sp_goals[0]
                 if g.get("weight_current") is not None:
                     weight_current = float(g["weight_current"])
                 if g.get("weight_goal") is not None:
                     weight_goal = float(g["weight_goal"])
-            sp_mode = supabase_request("bot_sessions?chat_id=eq.goal_mode")
+                if g.get("goal_mode"):
+                    goal_mode = str(g["goal_mode"])
+            mode_chat_id = f"goal_mode_{user_id}" if user_id != 1 else "goal_mode"
+            sp_mode = supabase_request(f"bot_sessions?chat_id=eq.{mode_chat_id}")
             if sp_mode and isinstance(sp_mode, list) and len(sp_mode) > 0:
                 m = sp_mode[0].get("mode")
                 if m in ["loss_200", "loss_300", "loss_400", "gain"]:
@@ -506,15 +568,15 @@ def get_user_goals() -> Dict[str, Any]:
             print(f"Supabase user_goals read error: {e}")
 
     goals = calculate_nutrition_goals(weight_current, mode=goal_mode, weight_goal=weight_goal)
-    cache_set("user_goals", goals)
+    cache_set(cache_key, goals)
     return goals
 
-def save_user_weight_and_goals(weight_current: float, mode: Optional[str] = None, weight_goal: Optional[float] = None) -> Dict[str, Any]:
+def save_user_weight_and_goals(weight_current: float, mode: Optional[str] = None, weight_goal: Optional[float] = None, user_id: int = 1) -> Dict[str, Any]:
     """
     Saves user weight and calculates/persists corresponding daily calorie and macro goals.
-    Persists to SQLite (user_goals + weight_log) and Supabase Cloud DB.
+    Persists to SQLite (user_goals + weight_log) and Supabase Cloud DB with user_id.
     """
-    current_g = get_user_goals()
+    current_g = get_user_goals(user_id=user_id)
     if not mode:
         mode = current_g.get("goal_mode", "loss_300")
     if weight_goal is None:
@@ -525,30 +587,33 @@ def save_user_weight_and_goals(weight_current: float, mode: Optional[str] = None
     # 1. Save to SQLite
     try:
         with get_connection() as conn:
-            existing = conn.execute("SELECT id FROM user_goals LIMIT 1").fetchone()
+            existing = conn.execute(
+                "SELECT id FROM user_goals WHERE (user_id = ? OR (user_id IS NULL AND ? = 1)) LIMIT 1",
+                (user_id, user_id)
+            ).fetchone()
             if existing:
                 conn.execute("""
                     UPDATE user_goals SET 
                         calories = ?, protein_g = ?, fat_g = ?, carbs_g = ?,
-                        weight_current = ?, weight_goal = ?, goal_mode = ?
+                        weight_current = ?, weight_goal = ?, goal_mode = ?, user_id = ?
                     WHERE id = ?
                 """, (
                     goals["calories"], goals["protein_g"], goals["fat_g"], goals["carbs_g"],
-                    goals["weight_current"], goals["weight_goal"], goals["goal_mode"], existing["id"]
+                    goals["weight_current"], goals["weight_goal"], goals["goal_mode"], user_id, existing["id"]
                 ))
             else:
                 conn.execute("""
-                    INSERT INTO user_goals (calories, protein_g, fat_g, carbs_g, weight_current, weight_goal, goal_mode)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO user_goals (calories, protein_g, fat_g, carbs_g, weight_current, weight_goal, goal_mode, user_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     goals["calories"], goals["protein_g"], goals["fat_g"], goals["carbs_g"],
-                    goals["weight_current"], goals["weight_goal"], goals["goal_mode"]
+                    goals["weight_current"], goals["weight_goal"], goals["goal_mode"], user_id
                 ))
 
             conn.execute("""
-                INSERT INTO weight_log (weight, goal_mode, notes)
-                VALUES (?, ?, ?)
-            """, (goals["weight_current"], goals["goal_mode"], f"Target: {goals['calories']} kcal"))
+                INSERT INTO weight_log (weight, goal_mode, notes, user_id)
+                VALUES (?, ?, ?, ?)
+            """, (goals["weight_current"], goals["goal_mode"], f"Target: {goals['calories']} kcal", user_id))
             conn.commit()
     except Exception as e:
         print(f"SQLite save_user_weight_and_goals error: {e}")
@@ -556,8 +621,9 @@ def save_user_weight_and_goals(weight_current: float, mode: Optional[str] = None
     # 2. Save to Supabase
     if SUPABASE_URL and SUPABASE_KEY:
         try:
+            sp_url = f"user_goals?user_id=eq.{user_id}" if user_id != 1 else "user_goals?id=eq.1"
             supabase_request(
-                "user_goals?id=eq.1",
+                sp_url,
                 method="PATCH",
                 data={
                     "calories": goals["calories"],
@@ -567,12 +633,13 @@ def save_user_weight_and_goals(weight_current: float, mode: Optional[str] = None
                     "weight_current": goals["weight_current"],
                     "weight_goal": goals["weight_goal"],
                     "goal_mode": goals["goal_mode"],
+                    "user_id": user_id
                 }
             )
             supabase_request(
                 "bot_sessions?on_conflict=chat_id",
                 method="POST",
-                data={"chat_id": "goal_mode", "mode": goals["goal_mode"]},
+                data={"chat_id": f"goal_mode_{user_id}" if user_id != 1 else "goal_mode", "mode": goals["goal_mode"]},
                 prefer="resolution=merge-duplicates,return=representation"
             )
         except Exception as e:
@@ -585,16 +652,270 @@ def save_user_weight_and_goals(weight_current: float, mode: Optional[str] = None
     except Exception:
         pass
 
-    cache_invalidate("user_goals")
+    cache_invalidate("user_goals", f"user_goals_{user_id}")
     return goals
 
-def get_today_summary(target_date: Optional[str] = None, price_map: Optional[Dict[str, float]] = None, goals: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+# ======================== AUTH FUNCTIONS ========================
+
+def _hash_password(password: str, salt: str) -> str:
+    """Returns sha256(salt + password) as hex string."""
+    return hashlib.sha256((salt + password).encode('utf-8')).hexdigest()
+
+def get_users_count() -> int:
+    """Returns total number of registered users. Used to allow first-time registration."""
+    # Check Supabase first
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            result = supabase_request("users?select=id")
+            if result is not None and isinstance(result, list):
+                return len(result)
+        except Exception:
+            pass
+    # Fallback to SQLite
+    try:
+        with get_connection() as conn:
+            row = conn.execute("SELECT COUNT(*) as cnt FROM users").fetchone()
+            return int(row["cnt"]) if row else 0
+    except Exception:
+        return 0
+
+def create_user(username: str, password: str) -> Dict[str, Any]:
+    """
+    Creates a new user with hashed password.
+    Returns {'user_id': int, 'username': str} or raises ValueError if username taken.
+    """
+    username = username.strip().lower()
+    if not username or not password:
+        raise ValueError("Логин и пароль обязательны")
+    if len(password) < 4:
+        raise ValueError("Пароль должен быть не менее 4 символов")
+
+    salt = uuid.uuid4().hex
+    password_hash = _hash_password(password, salt)
+
+    user_id = None
+
+    # Save to SQLite
+    try:
+        with get_connection() as conn:
+            cursor = conn.execute(
+                "INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)",
+                (username, password_hash, salt)
+            )
+            conn.commit()
+            user_id = cursor.lastrowid
+    except sqlite3.IntegrityError:
+        raise ValueError(f"Пользователь '{username}' уже существует")
+    except Exception as e:
+        print(f"create_user SQLite error: {e}")
+
+    # Save to Supabase
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            sp_result = supabase_request(
+                "users",
+                method="POST",
+                data={"username": username, "password_hash": password_hash, "salt": salt},
+                prefer="return=representation"
+            )
+            if sp_result and isinstance(sp_result, list) and sp_result[0].get("id"):
+                user_id = int(sp_result[0]["id"])  # Use Supabase ID
+        except Exception as e:
+            print(f"create_user Supabase error: {e}")
+
+    return {"user_id": user_id, "username": username}
+
+def login_user(username: str, password: str) -> Optional[Dict[str, Any]]:
+    """
+    Validates credentials. Returns {'user_id': int, 'username': str} or None.
+    """
+    username = username.strip().lower()
+
+    # Try Supabase first
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            result = supabase_request(f"users?username=eq.{urllib.parse.quote(username)}&select=*")
+            if result and isinstance(result, list) and len(result) > 0:
+                u = result[0]
+                salt = u.get("salt", "")
+                stored_hash = u.get("password_hash", "")
+                if stored_hash and _hash_password(password, salt) == stored_hash:
+                    return {"user_id": int(u["id"]), "username": u["username"]}
+                return None  # Wrong password
+        except Exception as e:
+            print(f"login_user Supabase error: {e}")
+
+    # Fallback to SQLite
+    try:
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            if not row:
+                return None
+            salt = row["salt"]
+            stored_hash = row["password_hash"]
+            if _hash_password(password, salt) == stored_hash:
+                return {"user_id": row["id"], "username": row["username"]}
+            return None
+    except Exception as e:
+        print(f"login_user SQLite error: {e}")
+        return None
+
+def create_session(user_id: int, device_name: str = "") -> str:
+    """
+    Creates a new session token for the user. Returns the token string.
+    Token expires in 30 days. Stored in SQLite and Supabase.
+    """
+    token = uuid.uuid4().hex + uuid.uuid4().hex  # 64 char token
+    now = datetime.utcnow()
+    expires_at = now + timedelta(days=30)
+    expires_str = expires_at.strftime("%Y-%m-%d %H:%M:%S")
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Save to SQLite
+    try:
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT INTO sessions (token, user_id, device_name, expires_at) VALUES (?, ?, ?, ?)",
+                (token, user_id, device_name or "", expires_str)
+            )
+            conn.commit()
+    except Exception as e:
+        print(f"create_session SQLite error: {e}")
+
+    # Save to Supabase
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            supabase_request(
+                "sessions",
+                method="POST",
+                data={
+                    "token": token,
+                    "user_id": user_id,
+                    "device_name": device_name or "",
+                    "expires_at": expires_at.isoformat() + "+00:00"
+                },
+                prefer="return=representation"
+            )
+        except Exception as e:
+            print(f"create_session Supabase error: {e}")
+
+    return token
+
+def validate_session(token: str) -> Optional[int]:
+    """
+    Validates a session token. Returns user_id if valid, None if expired/invalid.
+    Also updates last_used and extends expiry by 30 days on each call.
+    Uses a 30-second in-memory cache to avoid per-request DB lookups.
+    """
+    if not token or len(token) < 32:
+        return None
+
+    # Check memory cache first (cache key = 'sess_' + token[:16])
+    cache_key = f"sess_{token[:16]}"
+    cached = cache_get(cache_key, ttl=30.0)
+    if cached is not None:
+        return cached if cached != 0 else None
+
+    now = datetime.utcnow()
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    new_expires = (now + timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    user_id = None
+
+    # Try Supabase first
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            result = supabase_request(
+                f"sessions?token=eq.{token}&select=user_id,expires_at"
+            )
+            if result and isinstance(result, list) and len(result) > 0:
+                sess = result[0]
+                exp = sess.get("expires_at", "")
+                if exp and exp > now.isoformat():
+                    user_id = int(sess["user_id"])
+                    # Update last_used + extend expiry
+                    supabase_request(
+                        f"sessions?token=eq.{token}",
+                        method="PATCH",
+                        data={"last_used": now.isoformat() + "+00:00",
+                              "expires_at": (now + timedelta(days=30)).isoformat() + "+00:00"}
+                    )
+        except Exception as e:
+            print(f"validate_session Supabase error: {e}")
+
+    # Fallback to SQLite
+    if user_id is None:
+        try:
+            with get_connection() as conn:
+                row = conn.execute(
+                    "SELECT user_id, expires_at FROM sessions WHERE token = ?", (token,)
+                ).fetchone()
+                if row and row["expires_at"] > now_str:
+                    user_id = int(row["user_id"])
+                    conn.execute(
+                        "UPDATE sessions SET last_used = ?, expires_at = ? WHERE token = ?",
+                        (now_str, new_expires, token)
+                    )
+                    conn.commit()
+        except Exception as e:
+            print(f"validate_session SQLite error: {e}")
+
+    # Cache the result
+    cache_set(cache_key, user_id if user_id is not None else 0)
+    return user_id
+
+def delete_session(token: str) -> None:
+    """Deletes a session (logout). Removes from SQLite and Supabase."""
+    # Invalidate cache
+    cache_key = f"sess_{token[:16]}"
+    cache_invalidate(cache_key)
+
+    # Delete from SQLite
+    try:
+        with get_connection() as conn:
+            conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            conn.commit()
+    except Exception as e:
+        print(f"delete_session SQLite error: {e}")
+
+    # Delete from Supabase
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            supabase_request(f"sessions?token=eq.{token}", method="DELETE")
+        except Exception as e:
+            print(f"delete_session Supabase error: {e}")
+
+def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
+    """Returns basic user info by ID."""
+    # Try Supabase first
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            result = supabase_request(f"users?id=eq.{user_id}&select=id,username,created_at")
+            if result and isinstance(result, list) and len(result) > 0:
+                u = result[0]
+                return {"user_id": int(u["id"]), "username": u["username"]}
+        except Exception:
+            pass
+    # Fallback to SQLite
+    try:
+        with get_connection() as conn:
+            row = conn.execute("SELECT id, username FROM users WHERE id = ?", (user_id,)).fetchone()
+            if row:
+                return {"user_id": row["id"], "username": row["username"]}
+    except Exception as e:
+        print(f"get_user_by_id error: {e}")
+    return None
+
+# ======================== END AUTH FUNCTIONS ========================
+
+def get_today_summary(target_date: Optional[str] = None, price_map: Optional[Dict[str, float]] = None, goals: Optional[Dict[str, Any]] = None, user_id: int = 1) -> Dict[str, Any]:
     if not target_date:
         target_date = date.today().isoformat()
     if price_map is None:
         price_map = get_product_price_map()
     if goals is None:
-        goals = get_user_goals()
+        goals = get_user_goals(user_id=user_id)
 
     # Query Supabase Cloud DB if configured
     if SUPABASE_URL and SUPABASE_KEY:
@@ -605,39 +926,41 @@ def get_today_summary(target_date: Optional[str] = None, price_map: Optional[Dic
                 f"meals?select=*,meal_items(*)&timestamp=gte.{target_date}&timestamp=lt.{next_date}"
             )
             if sp_meals is not None and isinstance(sp_meals, list):
-                tot_cal = 0.0
-                tot_p = 0.0
-                tot_f = 0.0
-                tot_c = 0.0
-                active_cal = 0.0
-                tot_cost = 0.0
-                for m in sp_meals:
-                    is_active = m.get("notes") == "Активность"
-                    for mi in m.get("meal_items", []):
-                        cal = float(mi.get("calories", 0))
-                        tot_cal += cal
-                        tot_p += float(mi.get("protein_g", 0))
-                        tot_f += float(mi.get("fat_g", 0))
-                        tot_c += float(mi.get("carbs_g", 0))
-                        if is_active:
-                            active_cal += abs(cal)
-                        else:
-                            q = float(mi.get("quantity_g", 0))
-                            pn = mi.get("product_name", "")
-                            pr100 = find_item_price_per_100g(pn, price_map)
-                            if pr100 is not None and q > 0:
-                                tot_cost += (q / 100.0) * pr100
+                filtered_meals = [m for m in sp_meals if m.get("user_id") == user_id or (m.get("user_id") is None and user_id == 1)]
+                if filtered_meals or user_id == 1:
+                    tot_cal = 0.0
+                    tot_p = 0.0
+                    tot_f = 0.0
+                    tot_c = 0.0
+                    active_cal = 0.0
+                    tot_cost = 0.0
+                    for m in filtered_meals:
+                        is_active = m.get("notes") == "Активность"
+                        for mi in m.get("meal_items", []):
+                            cal = float(mi.get("calories", 0))
+                            tot_cal += cal
+                            tot_p += float(mi.get("protein_g", 0))
+                            tot_f += float(mi.get("fat_g", 0))
+                            tot_c += float(mi.get("carbs_g", 0))
+                            if is_active:
+                                active_cal += abs(cal)
+                            else:
+                                q = float(mi.get("quantity_g", 0))
+                                pn = mi.get("product_name", "")
+                                pr100 = find_item_price_per_100g(pn, price_map)
+                                if pr100 is not None and q > 0:
+                                    tot_cost += (q / 100.0) * pr100
 
-                return {
-                    "date": target_date,
-                    "total_calories": round(tot_cal, 1),
-                    "total_protein": round(tot_p, 1),
-                    "total_fat": round(tot_f, 1),
-                    "total_carbs": round(tot_c, 1),
-                    "active_calories": round(active_cal),
-                    "total_cost_eur": round(tot_cost, 2),
-                    "goals": goals
-                }
+                    return {
+                        "date": target_date,
+                        "total_calories": round(tot_cal, 1),
+                        "total_protein": round(tot_p, 1),
+                        "total_fat": round(tot_f, 1),
+                        "total_carbs": round(tot_c, 1),
+                        "active_calories": round(active_cal),
+                        "total_cost_eur": round(tot_cost, 2),
+                        "goals": goals
+                    }
         except Exception as e:
             print(f"Supabase summary error: {e}")
 
@@ -651,20 +974,20 @@ def get_today_summary(target_date: Optional[str] = None, price_map: Optional[Dic
                 COALESCE(SUM(mi.carbs_g), 0) as total_carbs
             FROM meals m
             JOIN meal_items mi ON m.id = mi.meal_id
-            WHERE DATE(m.timestamp) = DATE(?)
+            WHERE DATE(m.timestamp) = DATE(?) AND (m.user_id = ? OR (m.user_id IS NULL AND ? = 1))
         """
-        row = cursor.execute(query, (target_date,)).fetchone()
+        row = cursor.execute(query, (target_date, user_id, user_id)).fetchone()
 
         if goals is None:
-            goals = get_user_goals()
+            goals = get_user_goals(user_id=user_id)
 
         # Calculate active calories (where notes = 'Активность' or similar)
         active_row = cursor.execute("""
             SELECT COALESCE(SUM(ABS(mi.calories)), 0) as active_cal
             FROM meals m
             JOIN meal_items mi ON m.id = mi.meal_id
-            WHERE DATE(m.timestamp) = DATE(?) AND m.notes = 'Активность'
-        """, (target_date,)).fetchone()
+            WHERE DATE(m.timestamp) = DATE(?) AND m.notes = 'Активность' AND (m.user_id = ? OR (m.user_id IS NULL AND ? = 1))
+        """, (target_date, user_id, user_id)).fetchone()
         active_calories = round(active_row["active_cal"]) if active_row else 0
 
         # Calculate total cost for local sqlite meals
@@ -675,8 +998,8 @@ def get_today_summary(target_date: Optional[str] = None, price_map: Optional[Dic
             SELECT mi.product_name, mi.quantity_g 
             FROM meals m
             JOIN meal_items mi ON m.id = mi.meal_id
-            WHERE DATE(m.timestamp) = DATE(?) AND m.notes != 'Активность'
-        """, (target_date,)).fetchall()
+            WHERE DATE(m.timestamp) = DATE(?) AND m.notes != 'Активность' AND (m.user_id = ? OR (m.user_id IS NULL AND ? = 1))
+        """, (target_date, user_id, user_id)).fetchall()
         for it in items_today:
             q = float(it["quantity_g"] or 0)
             pn = it["product_name"] or ""
@@ -695,46 +1018,48 @@ def get_today_summary(target_date: Optional[str] = None, price_map: Optional[Dic
             "goals": goals
         }
 
-def get_recent_meals(limit: int = 10, target_date: str = None, price_map: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
+def get_recent_meals(limit: int = 10, target_date: str = None, price_map: Optional[Dict[str, float]] = None, user_id: int = 1) -> List[Dict[str, Any]]:
     if price_map is None:
         price_map = get_product_price_map()
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            url = f"meals?select=*,meal_items(*)&order=timestamp.desc&limit={limit}"
+            url = f"meals?select=*,meal_items(*)&order=timestamp.desc&limit={limit * 2}"
             if target_date:
                 url += f"&timestamp=gte.{target_date}T00:00:00&timestamp=lte.{target_date}T23:59:59"
             sp_meals = supabase_request(url)
             if sp_meals and isinstance(sp_meals, list) and len(sp_meals) > 0:
-                result = []
-                for m in sp_meals:
-                    items = m.get("meal_items", [])
-                    enriched_items = []
-                    meal_cost = 0.0
-                    for i in items:
-                        item_dict = dict(i)
-                        q = float(item_dict.get("quantity_g", 0))
-                        p_name = item_dict.get("product_name", "")
-                        pr100 = find_item_price_per_100g(p_name, price_map)
-                        cost = round((q / 100.0) * pr100, 2) if (pr100 is not None and q > 0) else 0.0
-                        item_dict["price_per_100g"] = pr100
-                        item_dict["cost_eur"] = cost
-                        meal_cost += cost
-                        enriched_items.append(item_dict)
+                filtered_meals = [m for m in sp_meals if m.get("user_id") == user_id or (m.get("user_id") is None and user_id == 1)][:limit]
+                if filtered_meals or user_id == 1:
+                    result = []
+                    for m in filtered_meals:
+                        items = m.get("meal_items", [])
+                        enriched_items = []
+                        meal_cost = 0.0
+                        for i in items:
+                            item_dict = dict(i)
+                            q = float(item_dict.get("quantity_g", 0))
+                            p_name = item_dict.get("product_name", "")
+                            pr100 = find_item_price_per_100g(p_name, price_map)
+                            cost = round((q / 100.0) * pr100, 2) if (pr100 is not None and q > 0) else 0.0
+                            item_dict["price_per_100g"] = pr100
+                            item_dict["cost_eur"] = cost
+                            meal_cost += cost
+                            enriched_items.append(item_dict)
 
-                    result.append({
-                        "id": m.get("id"),
-                        "timestamp": (m.get("timestamp") or m.get("created_at") or "")[:16].replace("T", " "),
-                        "raw_input": m.get("raw_input"),
-                        "input_type": m.get("input_type"),
-                        "meal_type": m.get("notes") or "Прием пищи",
-                        "items": enriched_items,
-                        "total_calories": int(round(sum(float(i.get("calories", 0)) for i in items))),
-                        "total_protein": int(round(sum(float(i.get("protein_g", 0)) for i in items))),
-                        "total_fat": int(round(sum(float(i.get("fat_g", 0)) for i in items))),
-                        "total_carbs": int(round(sum(float(i.get("carbs_g", 0)) for i in items))),
-                        "total_cost_eur": round(meal_cost, 2),
-                    })
-                return result
+                        result.append({
+                            "id": m.get("id"),
+                            "timestamp": (m.get("timestamp") or m.get("created_at") or "")[:16].replace("T", " "),
+                            "raw_input": m.get("raw_input"),
+                            "input_type": m.get("input_type"),
+                            "meal_type": m.get("notes") or "Прием пищи",
+                            "items": enriched_items,
+                            "total_calories": int(round(sum(float(i.get("calories", 0)) for i in items))),
+                            "total_protein": int(round(sum(float(i.get("protein_g", 0)) for i in items))),
+                            "total_fat": int(round(sum(float(i.get("fat_g", 0)) for i in items))),
+                            "total_carbs": int(round(sum(float(i.get("carbs_g", 0)) for i in items))),
+                            "total_cost_eur": round(meal_cost, 2),
+                        })
+                    return result
         except Exception as e:
             print(f"Supabase recent meals warning: {e}")
 
@@ -742,11 +1067,13 @@ def get_recent_meals(limit: int = 10, target_date: str = None, price_map: Option
         cursor = conn.cursor()
         if target_date:
             meals_rows = cursor.execute(
-                "SELECT * FROM meals WHERE DATE(timestamp) = DATE(?) ORDER BY timestamp DESC LIMIT ?", (target_date, limit)
+                "SELECT * FROM meals WHERE DATE(timestamp) = DATE(?) AND (user_id = ? OR (user_id IS NULL AND ? = 1)) ORDER BY timestamp DESC LIMIT ?",
+                (target_date, user_id, user_id, limit)
             ).fetchall()
         else:
             meals_rows = cursor.execute(
-                "SELECT * FROM meals ORDER BY timestamp DESC LIMIT ?", (limit,)
+                "SELECT * FROM meals WHERE (user_id = ? OR (user_id IS NULL AND ? = 1)) ORDER BY timestamp DESC LIMIT ?",
+                (user_id, user_id, limit)
             ).fetchall()
 
         result = []
@@ -782,12 +1109,13 @@ def get_recent_meals(limit: int = 10, target_date: str = None, price_map: Option
             })
         return result
 
-def get_meals_for_days(days: int = 3) -> List[Dict[str, Any]]:
+def get_meals_for_days(days: int = 3, user_id: int = 1) -> List[Dict[str, Any]]:
     target_date = (date.today() - timedelta(days=days)).isoformat()
     if SUPABASE_URL and SUPABASE_KEY:
         try:
             sp_meals = supabase_request(f"meals?select=*,meal_items(*)&timestamp=gte.{target_date}&order=timestamp.desc")
             if sp_meals and isinstance(sp_meals, list) and len(sp_meals) > 0:
+                sp_meals = [m for m in sp_meals if m.get("user_id") == user_id or (m.get("user_id") is None and user_id == 1)]
                 result = []
                 for m in sp_meals:
                     items = m.get("meal_items", [])
@@ -810,7 +1138,8 @@ def get_meals_for_days(days: int = 3) -> List[Dict[str, Any]]:
     with get_connection() as conn:
         cursor = conn.cursor()
         meals_rows = cursor.execute(
-            "SELECT * FROM meals WHERE timestamp >= ? ORDER BY timestamp DESC", (target_date,)
+            "SELECT * FROM meals WHERE timestamp >= ? AND (user_id = ? OR (user_id IS NULL AND ? = 1)) ORDER BY timestamp DESC",
+            (target_date, user_id, user_id)
         ).fetchall()
 
         result = []
@@ -983,11 +1312,12 @@ def add_meal_entry(
     items: Optional[List[Dict[str, Any]]] = None,
     raw_input: Optional[str] = None,
     target_date: Optional[str] = None,
-    target_time: Optional[str] = None
+    target_time: Optional[str] = None,
+    user_id: int = 1
 ) -> int:
     """
     Creates a new meal entry with structured items or by parsing raw text.
-    Binds to specified date/time if provided.
+    Binds to specified date/time if provided, with user_id.
     """
     ts = None
     if target_date:
@@ -1003,7 +1333,8 @@ def add_meal_entry(
             input_type="manual",
             items=items,
             meal_type=meal_type,
-            custom_timestamp=ts
+            custom_timestamp=ts,
+            user_id=user_id
         )
 
     if raw_input:
@@ -1023,7 +1354,8 @@ def add_meal_entry(
             input_type="text",
             items=audited_items,
             meal_type=meal_type,
-            custom_timestamp=ts
+            custom_timestamp=ts,
+            user_id=user_id
         )
 
     return 0
@@ -1039,7 +1371,7 @@ def clear_recent_meals(limit: int = 5) -> int:
             count += 1
     return count
 
-def delete_product_entry(product_name: Optional[str] = None, product_id: Optional[int] = None) -> bool:
+def delete_product_entry(product_name: Optional[str] = None, product_id: Optional[int] = None, user_id: int = 1) -> bool:
     """Deletes a product by product_name or product_id from product_prices, custom_products, and coach_recommendations."""
     target_name = (product_name or "").strip().lower()
     with get_connection() as conn:
@@ -1115,7 +1447,8 @@ def update_product_price(
     carbs_100g: float = 0.0,
     calories_100g: float = 0.0,
     coach_score: int = 0,
-    coach_verdict: str = ""
+    coach_verdict: str = "",
+    user_id: int = 1
 ) -> Dict[str, Any]:
     """
     Updates an existing product in SQLite and Supabase with exact values,
@@ -1337,7 +1670,7 @@ def estimate_product_nutrition(product_name: str, category: Optional[str] = None
 def save_product_price(product_name: str, price_rub: float, weight_g: float = 100.0,
                        category: str = "general", protein_100g: float = 0, fat_100g: float = 0,
                        carbs_100g: float = 0, calories_100g: float = 0, coach_score: int = 0,
-                       coach_verdict: str = ""):
+                       coach_verdict: str = "", user_id: int = 1):
     product_name = product_name.lower().strip()
     val = validate_product_values(
         protein_100g=protein_100g,
@@ -1368,8 +1701,8 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float = 10
         cursor.execute(
             """
             INSERT INTO product_prices 
-            (product_name, category, price_rub, weight_g, protein_per_100g, fat_per_100g, carbs_per_100g, calories_per_100g, coach_score, coach_verdict)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (product_name, category, price_rub, weight_g, protein_per_100g, fat_per_100g, carbs_per_100g, calories_per_100g, coach_score, coach_verdict, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(product_name) DO UPDATE SET
                 price_rub = excluded.price_rub,
                 weight_g = excluded.weight_g,
@@ -1380,9 +1713,10 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float = 10
                 calories_per_100g = CASE WHEN excluded.calories_per_100g > 0 THEN excluded.calories_per_100g ELSE product_prices.calories_per_100g END,
                 coach_score = CASE WHEN excluded.coach_score > 0 THEN excluded.coach_score ELSE product_prices.coach_score END,
                 coach_verdict = CASE WHEN length(excluded.coach_verdict) > 0 THEN excluded.coach_verdict ELSE product_prices.coach_verdict END,
+                user_id = COALESCE(excluded.user_id, product_prices.user_id),
                 updated_at = CURRENT_TIMESTAMP
             """,
-            (product_name, category, price_rub, weight_g, protein_100g, fat_100g, carbs_100g, calories_100g, coach_score, coach_verdict)
+            (product_name, category, price_rub, weight_g, protein_100g, fat_100g, carbs_100g, calories_100g, coach_score, coach_verdict, user_id)
         )
         conn.commit()
 
@@ -1404,12 +1738,13 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float = 10
                 "protein_per_100g": protein_100g,
                 "fat_per_100g": fat_100g,
                 "carbs_per_100g": carbs_100g,
-                "calories_per_100g": calories_100g
+                "calories_per_100g": calories_100g,
+                "user_id": user_id
             }, prefer="resolution=merge-duplicates,return=representation")
         except Exception as e:
             print(f"Supabase price sync warning: {e}")
 
-    cache_invalidate("product_prices", "product_price_map", "coach_product_verdicts")
+    cache_invalidate("product_prices", f"product_prices_{user_id}", "product_price_map", "coach_product_verdicts")
 
 def _load_coach_product_verdicts() -> Dict[str, Dict[str, Any]]:
     cached = cache_get("coach_product_verdicts", ttl=60.0)
@@ -1457,8 +1792,9 @@ def _load_coach_product_verdicts() -> Dict[str, Dict[str, Any]]:
     cache_set("coach_product_verdicts", verdicts)
     return verdicts
 
-def get_product_prices() -> List[Dict[str, Any]]:
-    cached = cache_get("product_prices", ttl=60.0)
+def get_product_prices(user_id: int = 1) -> List[Dict[str, Any]]:
+    cache_key = f"product_prices_{user_id}"
+    cached = cache_get(cache_key, ttl=60.0)
     if cached is not None:
         return cached
 
@@ -1467,6 +1803,8 @@ def get_product_prices() -> List[Dict[str, Any]]:
         try:
             sp_products = supabase_request("product_prices?select=*&order=product_name.asc")
             if sp_products and isinstance(sp_products, list) and len(sp_products) > 0:
+                # Filter: show products created by this user or shared ones (user_id is None)
+                sp_products = [d for d in sp_products if d.get("user_id") == user_id or d.get("user_id") is None]
                 result = []
                 for d in sp_products:
                     p = float(d.get("protein_per_100g", 0))
@@ -1499,13 +1837,13 @@ def get_product_prices() -> List[Dict[str, Any]]:
                     d["efficiency_label"] = label
                     d["badge_class"] = badge_class
                     result.append(d)
-                cache_set("product_prices", result)
+                cache_set(cache_key, result)
                 return result
         except Exception as e:
             print(f"Supabase product prices warning: {e}")
     with get_connection() as conn:
         cursor = conn.cursor()
-        rows = cursor.execute("SELECT * FROM product_prices ORDER BY product_name").fetchall()
+        rows = cursor.execute("SELECT * FROM product_prices WHERE (user_id = ? OR user_id IS NULL) ORDER BY product_name", (user_id,)).fetchall()
         result = []
         for r in rows:
             d = dict(r)
