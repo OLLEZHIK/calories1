@@ -462,30 +462,33 @@ a{color:inherit}
 .login-logo p{ font-size:12px; color:var(--ink-3); margin:0; }
 
 .login-tabs{
-  display:flex; gap:0; border:1px solid var(--hair); border-radius:8px;
-  overflow:hidden; margin-bottom:24px;
+  display:flex; gap:0; border:1.5px solid var(--hair); border-radius:8px;
+  overflow:hidden; margin-bottom:24px; background:var(--panel-2);
 }
 .login-tab-btn{
-  flex:1; background:transparent; border:none; padding:9px 0;
+  flex:1; background:transparent; border:none; padding:10px 0;
   font-family:"Golos Text",sans-serif; font-size:13px; font-weight:600;
-  color:var(--ink-3); cursor:pointer; transition:all .15s;
+  color:var(--ink-2); cursor:pointer; transition:all .15s;
 }
 .login-tab-btn.active{
-  background:var(--ink); color:#fff;
+  background:var(--p) !important; color:#ffffff !important;
 }
 
 .login-form-group{ margin-bottom:16px; }
 .login-form-group label{
-  display:block; font-size:12px; font-weight:600; color:var(--ink-2);
+  display:block; font-size:12px; font-weight:600; color:var(--ink-2) !important;
   margin-bottom:6px; text-transform:uppercase; letter-spacing:.04em;
 }
 .login-form-group input{
   width:100%; box-sizing:border-box;
-  padding:11px 14px; border:1.5px solid var(--hair); border-radius:8px;
-  font-family:"Golos Text",sans-serif; font-size:15px; color:var(--ink);
-  background:var(--paper); outline:none; transition:border-color .15s;
+  padding:12px 14px; border:1.5px solid var(--hair); border-radius:8px;
+  font-family:"Golos Text",sans-serif; font-size:15px; color:var(--ink) !important;
+  background:var(--panel-2) !important; outline:none; transition:border-color .15s;
 }
-.login-form-group input:focus{ border-color:var(--p); }
+.login-form-group input::placeholder{
+  color:var(--ink-3) !important; opacity:0.8 !important;
+}
+.login-form-group input:focus{ border-color:var(--p) !important; }
 
 .login-error{
   background:var(--crit-bg); border:1px solid var(--crit);
@@ -493,7 +496,7 @@ a{color:inherit}
   font-weight:600; margin-bottom:16px; display:none;
 }
 .login-btn{
-  width:100%; padding:13px; background:var(--ink); color:#fff;
+  width:100%; padding:13px; background:var(--p) !important; color:#ffffff !important;
   border:none; border-radius:8px; font-family:"Golos Text",sans-serif;
   font-size:15px; font-weight:700; cursor:pointer; transition:opacity .15s;
   margin-top:4px;
@@ -526,7 +529,7 @@ a{color:inherit}
     <!-- Tab switcher: Login / Register -->
     <div class="login-tabs" id="login-tabs">
       <button class="login-tab-btn active" id="tab-btn-login" onclick="switchLoginTab('login')">Войти</button>
-      <button class="login-tab-btn" id="tab-btn-register" onclick="switchLoginTab('register')" style="display:none;" id="tab-btn-register">Создать аккаунт</button>
+      <button class="login-tab-btn" id="tab-btn-register" onclick="switchLoginTab('register')">Создать аккаунт</button>
     </div>
 
     <div id="login-error" class="login-error"></div>
@@ -2255,30 +2258,15 @@ async function checkAuth() {
   showLoginOverlay();
 }
 
-/** If no users exist yet, show the Register tab automatically */
+/** If no users exist yet in database, switch to Register tab by default */
 async function checkFirstTimeSetup() {
   try {
-    // We use /api/auth/check to detect if this is a fresh setup by trying an empty token
-    // Instead, we look at a simple signal: if login fails with "user not found" vs "wrong password"
-    // For the first-time setup, show register tab if register button is visible
-    const res = await fetch(`${API_BASE}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: '__probe__', password: '__probe__' })
-    });
-    const data = await res.json();
-    // Server returns 403 on register if users exist, so we try register probe:
-    const regRes = await fetch(`${API_BASE}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: '__probe__', password: '____' })
-    });
-    const regData = await regRes.json();
-    // If register is allowed (not 403), show Register tab
-    if (regRes.status !== 403) {
-      const regBtn = document.getElementById('tab-btn-register');
-      if (regBtn) regBtn.style.display = '';
-      switchLoginTab('register');
+    const res = await fetch(`${API_BASE}/api/auth/check`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.users_count === 0) {
+        switchLoginTab('register');
+      }
     }
   } catch(e) {}
 }

@@ -87,11 +87,11 @@ class handler(BaseHTTPRequestHandler):
         if path == '/api/auth/check':
             token = self._get_token()
             if not token:
-                self._send_json(401, {"valid": False, "error": "No token"})
+                self._send_json(200, {"valid": False, "users_count": get_users_count()})
                 return
             user_id = validate_session(token)
             if not user_id:
-                self._send_json(401, {"valid": False, "error": "Session expired"})
+                self._send_json(200, {"valid": False, "users_count": get_users_count(), "error": "Session expired"})
                 return
             user = get_user_by_id(user_id)
             self._send_json(200, {
@@ -229,11 +229,6 @@ class handler(BaseHTTPRequestHandler):
                 password = (data.get("password") or "").strip()
                 if not username or not password:
                     self._send_json(400, {"error": "Введите логин и пароль"})
-                    return
-                # Only allow registration if no users exist yet
-                count = get_users_count()
-                if count > 0:
-                    self._send_json(403, {"error": "Регистрация закрыта. Обратитесь к администратору."})
                     return
                 user = create_user(username, password)
                 device_name = self.headers.get('User-Agent', '')[:200]
