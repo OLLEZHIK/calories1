@@ -2177,17 +2177,6 @@ try {
    Token stored in localStorage.auth_token (30-day session)
 ═══════════════════════════════════════════════════════════════════════════ */
 
-const API_BASE = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
-
-/** Returns fetch headers with Authorization Bearer token */
-function authHeaders() {
-  const token = localStorage.getItem('auth_token') || '';
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': token ? `Bearer ${token}` : ''
-  };
-}
-
 function showLoginOverlay() {
   document.getElementById('auth-overlay').classList.remove('hidden');
   setTimeout(() => {
