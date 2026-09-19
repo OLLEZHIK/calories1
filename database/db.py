@@ -566,6 +566,7 @@ def save_user_weight_and_goals(weight_current: float, mode: Optional[str] = None
                     "carbs_g": goals["carbs_g"],
                     "weight_current": goals["weight_current"],
                     "weight_goal": goals["weight_goal"],
+                    "goal_mode": goals["goal_mode"],
                 }
             )
             supabase_request(

@@ -474,7 +474,7 @@ a{color:inherit}
           <span>кг</span>
         </div>
         <button class="wg-btn" id="btn-save-weight" onclick="saveWeightAndGoals()">Сохранить</button>
-        <span id="weight-save-status" class="wg-status">✓ Сохранено в БД</span>
+        <span id="weight-save-status" class="wg-status" style="display:none;"></span>
       </div>
     </div>
 
@@ -1004,12 +1004,17 @@ function calcClientGoals(w, mode, wGoal) {
 
 function updateGoalsUI(goals) {
   if (!goals) return;
-  currentWeight = goals.weight_current || currentWeight;
+  const wInput = document.getElementById('weight-input');
+  const weightFieldFocused = wInput && document.activeElement === wInput;
+
+  // Only update currentWeight from API if user is NOT actively editing the field
+  if (!weightFieldFocused) {
+    currentWeight = goals.weight_current || currentWeight;
+  }
   currentGoalMode = goals.goal_mode || currentGoalMode;
   currentWeightGoal = goals.weight_goal || currentWeightGoal;
 
-  const wInput = document.getElementById('weight-input');
-  if (wInput && document.activeElement !== wInput) {
+  if (wInput && !weightFieldFocused) {
     wInput.value = currentWeight;
   }
 
@@ -1101,7 +1106,13 @@ async function saveWeightAndGoals() {
     if (res.ok) {
       const data = await res.json();
       if (data.goals) {
-        updateGoalsUI(data.goals);
+        // Don't update weight from API response — we already know the correct weight.
+        // Only sync goal targets (calories/macros) in case server recalculated them.
+        const mergedGoals = {
+          ...data.goals,
+          weight_current: currentWeight  // keep client-side weight authoritative
+        };
+        updateGoalsUI(mergedGoals);
         if (data.summary) updateUI({ summary: data.summary, ...data });
       }
       if (statusEl) {
