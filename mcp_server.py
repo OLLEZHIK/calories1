@@ -44,6 +44,51 @@ def mcp_call(method: str, params: Dict[str, Any]) -> Dict[str, Any]:
         res = economy_agent.audit_and_clean_catalog()
         return {"status": "success", "audit": res}
 
+    elif method == "add_product":
+        from database.db import save_product_price
+        save_product_price(
+            product_name=params.get("product_name", ""),
+            price_rub=float(params.get("price_rub") or params.get("price") or 0.0),
+            weight_g=float(params.get("weight_g") or 100.0),
+            category=params.get("category", "general"),
+            protein_100g=float(params.get("protein_100g") or 0.0),
+            fat_100g=float(params.get("fat_100g") or 0.0),
+            carbs_100g=float(params.get("carbs_100g") or 0.0),
+            calories_100g=float(params.get("calories_100g") or 0.0),
+            coach_score=int(params.get("coach_score") or 0),
+            coach_verdict=params.get("coach_verdict", "")
+        )
+        dashboard_agent.render()
+        return {"status": "success", "message": f"Product '{params.get('product_name')}' added"}
+
+    elif method == "update_product":
+        from database.db import update_product_price
+        res = update_product_price(
+            product_name=params.get("product_name", ""),
+            original_name=params.get("original_name"),
+            product_id=params.get("id") or params.get("product_id"),
+            price_rub=float(params.get("price_rub") or params.get("price") or 0.0),
+            weight_g=float(params.get("weight_g") or 100.0),
+            category=params.get("category", "general"),
+            protein_100g=float(params.get("protein_100g") or 0.0),
+            fat_100g=float(params.get("fat_100g") or 0.0),
+            carbs_100g=float(params.get("carbs_100g") or 0.0),
+            calories_100g=float(params.get("calories_100g") or 0.0),
+            coach_score=int(params.get("coach_score") or 0),
+            coach_verdict=params.get("coach_verdict", "")
+        )
+        dashboard_agent.render()
+        return {"status": "success", "product": res}
+
+    elif method == "delete_product":
+        from database.db import delete_product_entry
+        delete_product_entry(
+            product_name=params.get("product_name"),
+            product_id=params.get("id") or params.get("product_id")
+        )
+        dashboard_agent.render()
+        return {"status": "success", "message": "Product deleted"}
+
     else:
         return {"status": "error", "message": f"Unknown method {method}"}
 

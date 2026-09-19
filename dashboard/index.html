@@ -270,6 +270,151 @@ a{color:inherit}
 .score-badge.good{background:var(--good-bg); color:var(--good);}
 .score-badge.warn{background:var(--warn-bg); color:var(--warn);}
 .score-badge.crit{background:var(--crit-bg); color:var(--crit);}
+
+/* ---------- products actions, modals, and toolbar ---------- */
+.prod-head-actions{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+.prod-search{
+  padding:6px 12px; font-size:13px; background:var(--panel-2);
+  border:1px solid var(--hair); border-radius:4px; color:var(--ink);
+  outline:none; min-width:170px; font-family:"Golos Text",sans-serif;
+  transition:border-color .15s ease;
+}
+.prod-search:focus{border-color:var(--p);}
+.btn-add-product{
+  background:var(--p); color:#fff; border:none; border-radius:4px;
+  padding:7px 14px; font-weight:600; font-size:13px; cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px; font-family:"Golos Text",sans-serif;
+  transition:opacity .2s ease;
+}
+.btn-add-product:hover{opacity:0.9;}
+
+.btn-action{
+  background:var(--panel-2); border:1px solid var(--hair); border-radius:4px;
+  padding:4px 7px; font-size:13px; cursor:pointer; transition:all 0.15s ease;
+  color:var(--ink); margin:0 2px; display:inline-flex; align-items:center; justify-content:center;
+}
+.btn-action:hover{border-color:var(--ink-3); background:color-mix(in srgb, var(--p) 10%, var(--panel));}
+.btn-action.btn-del:hover{border-color:var(--crit); color:var(--crit); background:var(--crit-bg);}
+
+/* Modal */
+.modal-backdrop{
+  position:fixed; inset:0; background:rgba(0,0,0,0.58);
+  backdrop-filter:blur(3px); z-index:9999; display:flex;
+  align-items:center; justify-content:center; padding:16px;
+}
+.modal-card{
+  background:var(--panel); border:1px solid var(--hair); border-radius:6px;
+  box-shadow:0 12px 36px rgba(0,0,0,0.3); width:100%; max-width:580px;
+  max-height:90vh; overflow-y:auto; padding:22px; color:var(--ink);
+  animation:modalPop 0.18s ease-out;
+}
+@keyframes modalPop{
+  from{opacity:0; transform:scale(0.96) translateY(8px);}
+  to{opacity:1; transform:scale(1) translateY(0);}
+}
+.modal-head{
+  display:flex; justify-content:space-between; align-items:center;
+  margin-bottom:16px; padding-bottom:10px; border-bottom:1px solid var(--hair);
+}
+.modal-head h3{font-family:Oswald,sans-serif; font-size:18px; text-transform:uppercase; margin:0;}
+.modal-close{
+  background:transparent; border:none; font-size:18px; color:var(--ink-3);
+  cursor:pointer; padding:4px 8px; border-radius:4px; transition:color 0.15s;
+}
+.modal-close:hover{color:var(--ink);}
+
+.form-row{display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap;}
+.form-group{display:flex; flex-direction:column; gap:5px; flex:1; min-width:120px;}
+.form-group label{
+  font-size:11px; font-family:"JetBrains Mono",monospace;
+  text-transform:uppercase; letter-spacing:.05em; color:var(--ink-2); font-weight:600;
+}
+.form-group input, .form-group select, .form-group textarea{
+  background:var(--panel-2); border:1px solid var(--hair); border-radius:4px;
+  padding:8px 10px; font-family:"Golos Text",sans-serif; font-size:13.5px;
+  color:var(--ink); outline:none; width:100%; box-sizing:border-box;
+  transition:border-color .15s ease;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus{border-color:var(--p);}
+.num-preview{
+  background:var(--panel-2); border:1px solid var(--hair); border-radius:4px;
+  padding:8px 10px; font-family:"JetBrains Mono",monospace; font-size:14px;
+  font-weight:700; color:var(--good); text-align:right; box-sizing:border-box;
+}
+.macro-section-title{
+  font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--ink-2); font-family:"JetBrains Mono",monospace; margin:16px 0 8px 0;
+  border-top:1px solid var(--hair); padding-top:12px;
+}
+.macro-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:10px;}
+@media (max-width:520px){
+  .macro-grid{grid-template-columns:repeat(2,1fr);}
+}
+.formula-badge{
+  background:var(--panel-2); border:1px solid var(--hair); border-radius:4px;
+  padding:7px 12px; font-family:"JetBrains Mono",monospace; font-size:11.5px;
+  display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;
+  gap:8px; flex-wrap:wrap; color:var(--ink-2);
+}
+.btn-sync-cal{
+  background:transparent; border:1px solid var(--p); color:var(--p);
+  border-radius:3px; padding:3px 8px; font-size:11px; cursor:pointer; font-weight:600;
+  transition:all 0.15s ease;
+}
+.btn-sync-cal:hover{background:var(--p); color:#fff;}
+.btn-ai-calc{
+  background:color-mix(in srgb, var(--p) 14%, var(--panel));
+  border:1px solid var(--p); color:var(--p); border-radius:4px;
+  padding:0 12px; font-weight:600; font-size:12px; cursor:pointer;
+  white-space:nowrap; transition:all 0.15s ease;
+}
+.btn-ai-calc:hover{background:var(--p); color:#fff;}
+
+.modal-status{
+  font-size:12px; font-family:"JetBrains Mono",monospace; padding:6px 10px;
+  border-radius:4px; margin-top:10px; display:none;
+}
+.modal-status.err{background:var(--crit-bg); color:var(--crit); border:1px solid color-mix(in srgb, var(--crit) 30%, transparent);}
+.modal-status.ok{background:var(--good-bg); color:var(--good); border:1px solid color-mix(in srgb, var(--good) 30%, transparent);}
+
+.modal-foot{
+  display:flex; justify-content:flex-end; gap:10px; margin-top:18px;
+  padding-top:14px; border-top:1px solid var(--hair);
+}
+.btn-primary{
+  background:var(--p); color:#fff; border:none; border-radius:4px;
+  padding:8px 16px; font-weight:600; font-size:13px; cursor:pointer;
+  transition:opacity .2s; font-family:"Golos Text",sans-serif;
+}
+.btn-primary:hover{opacity:0.9;}
+.btn-primary:disabled{opacity:0.5; cursor:not-allowed;}
+
+.btn-secondary{
+  background:var(--panel-2); border:1px solid var(--hair); color:var(--ink);
+  border-radius:4px; padding:8px 14px; font-weight:500; font-size:13px;
+  cursor:pointer; transition:all .15s; font-family:"Golos Text",sans-serif;
+}
+.btn-secondary:hover{border-color:var(--ink-3);}
+
+.btn-danger{
+  background:var(--crit); color:#fff; border:none; border-radius:4px;
+  padding:8px 16px; font-weight:600; font-size:13px; cursor:pointer;
+  transition:opacity .2s; font-family:"Golos Text",sans-serif;
+}
+.btn-danger:hover{opacity:0.9;}
+.btn-danger:disabled{opacity:0.5; cursor:not-allowed;}
+
+.toast-popup{
+  position:fixed; bottom:24px; right:24px; background:var(--panel);
+  border:1px solid var(--hair); box-shadow:0 6px 22px rgba(0,0,0,0.22);
+  border-left:4px solid var(--good); border-radius:4px; padding:12px 18px;
+  font-family:"Golos Text",sans-serif; font-size:13.5px; font-weight:600;
+  color:var(--ink); z-index:10000; animation:toastIn 0.25s ease-out;
+}
+@keyframes toastIn{
+  from{opacity:0; transform:translateY(12px);}
+  to{opacity:1; transform:translateY(0);}
+}
 </style>
 </head>
 <body>
@@ -471,10 +616,16 @@ a{color:inherit}
   </div>
 
   <!-- Product Prices Table -->
-  <div class="sect" id="sect-products" style="display:none;">
+  <div class="sect" id="sect-products">
     <div class="sect-head">
-      <h2>Таблица продуктов и цен (€)</h2>
-      <span class="eyebrow">Пищевая ценность и оценка тренера</span>
+      <div>
+        <h2>Таблица продуктов и цен (€)</h2>
+        <span class="eyebrow" id="products-count-badge">Пищевая ценность и оценка тренера</span>
+      </div>
+      <div class="prod-head-actions">
+        <input type="text" id="prod-search-input" class="prod-search" placeholder="🔍 Поиск продукта..." oninput="onProductSearch(this.value)">
+        <button class="btn-add-product" onclick="openProductModal('add')">➕ Добавить продукт</button>
+      </div>
     </div>
     <hr class="rule-heavy">
     <div class="products-table-wrap">
@@ -482,18 +633,150 @@ a{color:inherit}
         <thead>
           <tr>
             <th style="text-align:left;">Название продукта</th>
-            <th style="text-align:right;">Калорийность (100г)</th>
+            <th style="text-align:right;">Калории (100г)</th>
             <th style="text-align:right;">Белки (100г)</th>
             <th style="text-align:right;">Жиры (100г)</th>
             <th style="text-align:right;">Углеводы (100г)</th>
             <th style="text-align:right;">Цена за 100г</th>
-            <th style="text-align:center;">Оценка тренера (1-10)</th>
+            <th style="text-align:center;">Оценка тренера</th>
+            <th style="text-align:center; min-width:86px;">Действия</th>
           </tr>
         </thead>
         <tbody id="products-tbody"></tbody>
       </table>
+      <div id="products-empty-state" style="display:none; padding:32px 16px; text-align:center; color:var(--ink-3);">
+        <p style="font-size:15px; margin-bottom:12px;">Продуктов пока нет или ничего не найдено по вашему запросу.</p>
+        <button class="btn-add-product" onclick="openProductModal('add')">➕ Добавить новый продукт</button>
+      </div>
     </div>
   </div>
+
+  <!-- Product Add/Edit Modal Dialog -->
+  <div class="modal-backdrop" id="product-modal" style="display:none;" onclick="if(event.target===this) closeProductModal()">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="modal-title">➕ Добавить продукт</h3>
+        <button type="button" class="modal-close" onclick="closeProductModal()">✕</button>
+      </div>
+      <form id="product-form" onsubmit="event.preventDefault(); saveProductFromModal();">
+        <input type="hidden" id="prod-form-id">
+        <input type="hidden" id="prod-form-orig-name">
+
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label>Название продукта *</label>
+            <div style="display:flex; gap:6px;">
+              <input type="text" id="prod-name-input" required placeholder="например: Творог 5%, Куриное филе...">
+              <button type="button" class="btn-ai-calc" id="btn-ai-estimate" title="Автоматически рассчитать КБЖУ и оценку тренера через ИИ" onclick="estimateNutritionFromAI()">
+                ✨ ИИ
+              </button>
+            </div>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>Категория</label>
+            <select id="prod-category-select">
+              <option value="general">Общая</option>
+              <option value="meat">🥩 Мясо / Птица</option>
+              <option value="fish">🐟 Рыба / Морепродукты</option>
+              <option value="eggs_dairy">🥚 Яйца / Молочные</option>
+              <option value="fats_oils">🥑 Масла / Жиры</option>
+              <option value="vegetables">🥦 Овощи / Зелень</option>
+              <option value="fruit">🍎 Фрукты / Ягоды</option>
+              <option value="grains">🌾 Крупы / Зерновые</option>
+              <option value="bakery">🍞 Выпечка / Хлеб</option>
+              <option value="sweets">🍫 Сладости / Десерты</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Вес упаковки / порции (г) *</label>
+            <input type="number" id="prod-weight-input" min="1" step="1" value="100" required oninput="calcPricePer100gPreview()">
+          </div>
+          <div class="form-group">
+            <label>Цена упаковки (€) *</label>
+            <input type="number" id="prod-price-input" min="0" step="0.01" value="0.00" required oninput="calcPricePer100gPreview()">
+          </div>
+          <div class="form-group">
+            <label>Цена за 100г (€)</label>
+            <div class="num-preview" id="prod-price100-preview">0.00 €</div>
+          </div>
+        </div>
+
+        <div class="macro-section-title">Пищевая ценность (на 100 г продукта)</div>
+        <div class="macro-grid">
+          <div class="form-group">
+            <label style="color:var(--p);">Белки (г)</label>
+            <input type="number" id="prod-p-input" min="0" max="100" step="0.1" value="0" oninput="onMacroInput()">
+          </div>
+          <div class="form-group">
+            <label style="color:var(--f);">Жиры (г)</label>
+            <input type="number" id="prod-f-input" min="0" max="100" step="0.1" value="0" oninput="onMacroInput()">
+          </div>
+          <div class="form-group">
+            <label style="color:var(--c);">Углеводы (г)</label>
+            <input type="number" id="prod-c-input" min="0" max="100" step="0.1" value="0" oninput="onMacroInput()">
+          </div>
+          <div class="form-group">
+            <label>Калории (ккал) *</label>
+            <input type="number" id="prod-cal-input" min="0" max="900" step="1" value="0" required>
+          </div>
+        </div>
+
+        <!-- Formula Check Badge -->
+        <div class="formula-badge" id="prod-formula-badge">
+          <span id="prod-formula-text">4×Б + 9×Ж + 4×У = 0 ккал</span>
+          <button type="button" class="btn-sync-cal" onclick="syncCaloriesFromFormula()" title="Рассчитать калории строго по макросам">
+            ⚡ По формуле
+          </button>
+        </div>
+
+        <div class="form-row" style="margin-top:10px;">
+          <div class="form-group" style="flex:1;">
+            <label>Оценка полезности тренера (1-10)</label>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input type="number" id="prod-score-input" min="1" max="10" step="1" value="7" oninput="updateScoreBadgePreview(this.value)">
+              <span class="score-badge good" id="prod-score-badge">🟢 7/10</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top:10px;">
+          <label>Комментарий / Вердикт тренера</label>
+          <textarea id="prod-verdict-input" rows="2" placeholder="Краткое заключение тренера о пользе продукта, БЖУ и влиянии на форму..."></textarea>
+        </div>
+
+        <div id="modal-status-msg" class="modal-status" style="display:none;"></div>
+
+        <div class="modal-foot">
+          <button type="button" class="btn-secondary" onclick="closeProductModal()">Отмена</button>
+          <button type="submit" class="btn-primary" id="btn-modal-save">💾 Сохранить продукт</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Product Delete Confirmation Modal -->
+  <div class="modal-backdrop" id="delete-modal" style="display:none;" onclick="if(event.target===this) closeDeleteModal()">
+    <div class="modal-card" style="max-width:440px;">
+      <div class="modal-head">
+        <h3 style="color:var(--crit);">🗑️ Удалить продукт</h3>
+        <button type="button" class="modal-close" onclick="closeDeleteModal()">✕</button>
+      </div>
+      <div style="padding:14px 0;">
+        <p style="margin:0 0 8px 0;">Вы действительно хотите удалить продукт <strong id="delete-prod-name-display" style="color:var(--ink);"></strong> из базы данных?</p>
+        <p style="font-size:12.5px; color:var(--ink-3); margin:0;">Запись будет удалена из каталога продуктов и истории цен.</p>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn-secondary" onclick="closeDeleteModal()">Отмена</button>
+        <button type="button" class="btn-danger" id="btn-confirm-delete" onclick="confirmDeleteProduct()">Удалить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast-notify" class="toast-popup" style="display:none;"></div>
 
 </div>
 
@@ -820,37 +1103,343 @@ function updateUI(data) {
   }
 
   // Products Table Update
-  const prodTbody = document.getElementById('products-tbody');
-  if (products && products.length > 0) {
-    document.getElementById('sect-products').style.display = 'block';
-    prodTbody.innerHTML = products.map(p => {
-      const price100 = (p.price_per_100g || 0).toFixed(2);
-      const totalPrice = (p.price_rub || 0).toFixed(2);
-      const weight = Math.round(p.weight_g || 100);
-      const score = p.coach_score || p.efficiency_score || 5;
-      const scoreClass = score >= 8 ? 'good' : (score >= 5 ? 'warn' : 'crit');
-      const scoreBadge = score >= 8 ? '🟢' : (score >= 5 ? '🟡' : '🔴');
-      return `
-      <tr>
-        <td>
-          <div class="prod-name">${escapeHtml(p.product_name)}</div>
-          ${totalPrice > 0 && weight !== 100 ? `<div class="prod-meta">Упаковка: ${weight}г (${totalPrice} €)</div>` : ''}
-          ${p.coach_verdict ? `<div class="prod-verdict">💬 «${escapeHtml(p.coach_verdict)}»</div>` : ''}
-        </td>
-        <td class="num-cell"><strong>${Math.round(p.calories_per_100g || 0)}</strong> <small style="color:var(--ink-3)">ккал</small></td>
-        <td class="num-cell" style="color:var(--p); font-weight:600;">${p.protein_per_100g || 0}г</td>
-        <td class="num-cell" style="color:var(--f); font-weight:600;">${p.fat_per_100g || 0}г</td>
-        <td class="num-cell" style="color:var(--c); font-weight:600;">${p.carbs_per_100g || 0}г</td>
-        <td class="num-cell" style="font-weight:700; color:var(--good);">${price100} €</td>
-        <td style="text-align:center;">
-          <span class="score-badge ${scoreClass}">${scoreBadge} ${score}/10</span>
-        </td>
-      </tr>
-      `;
-    }).join('');
-  } else {
-    document.getElementById('sect-products').style.display = 'none';
+  window._ALL_PRODUCTS = products || [];
+  renderProductsTable(window._ALL_PRODUCTS);
+}
+
+window._ALL_PRODUCTS = [];
+window._PRODUCT_TO_DELETE = null;
+
+function renderProductsTable(products) {
+  const sect = document.getElementById('sect-products');
+  const tbody = document.getElementById('products-tbody');
+  const emptyState = document.getElementById('products-empty-state');
+  const countBadge = document.getElementById('products-count-badge');
+  const searchInput = document.getElementById('prod-search-input');
+  const query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+
+  sect.style.display = 'block';
+
+  let filtered = products || [];
+  if (query) {
+    filtered = filtered.filter(p => {
+      const name = (p.product_name || '').toLowerCase();
+      const cat = (p.category || '').toLowerCase();
+      const verd = (p.coach_verdict || '').toLowerCase();
+      return name.includes(query) || cat.includes(query) || verd.includes(query);
+    });
   }
+
+  if (countBadge) {
+    countBadge.innerText = `Всего продуктов: ${window._ALL_PRODUCTS.length}` + (query ? ` (найдено: ${filtered.length})` : '');
+  }
+
+  if (!filtered || filtered.length === 0) {
+    tbody.innerHTML = '';
+    if (emptyState) emptyState.style.display = 'block';
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = 'none';
+
+  tbody.innerHTML = filtered.map(p => {
+    // Find original index in window._ALL_PRODUCTS
+    const origIdx = window._ALL_PRODUCTS.indexOf(p);
+    const price100 = (p.price_per_100g || 0).toFixed(2);
+    const totalPrice = (p.price_rub || 0).toFixed(2);
+    const weight = Math.round(p.weight_g || 100);
+    const score = p.coach_score || p.efficiency_score || 5;
+    const scoreClass = score >= 8 ? 'good' : (score >= 5 ? 'warn' : 'crit');
+    const scoreBadge = score >= 8 ? '🟢' : (score >= 5 ? '🟡' : '🔴');
+    const catLabels = {
+      'meat': '🥩 Мясо', 'fish': '🐟 Рыба', 'eggs_dairy': '🥚 Молочные',
+      'fats_oils': '🥑 Жиры', 'vegetables': '🥦 Овощи', 'fruit': '🍎 Фрукты',
+      'grains': '🌾 Крупы', 'bakery': '🍞 Выпечка', 'sweets': '🍫 Сладости', 'general': 'Общая'
+    };
+    const catLabel = catLabels[p.category] || p.category || '';
+
+    return `
+    <tr>
+      <td>
+        <div class="prod-name">${escapeHtml(p.product_name)}</div>
+        <div class="prod-meta">
+          ${catLabel ? `<span style="margin-right:6px; color:var(--ink-2);">${catLabel}</span>` : ''}
+          ${totalPrice > 0 ? `Упаковка: ${weight}г (${totalPrice} €)` : `Порция: ${weight}г`}
+        </div>
+        ${p.coach_verdict ? `<div class="prod-verdict">💬 «${escapeHtml(p.coach_verdict)}»</div>` : ''}
+      </td>
+      <td class="num-cell"><strong>${Math.round(p.calories_per_100g || 0)}</strong> <small style="color:var(--ink-3)">ккал</small></td>
+      <td class="num-cell" style="color:var(--p); font-weight:600;">${p.protein_per_100g || 0}г</td>
+      <td class="num-cell" style="color:var(--f); font-weight:600;">${p.fat_per_100g || 0}г</td>
+      <td class="num-cell" style="color:var(--c); font-weight:600;">${p.carbs_per_100g || 0}г</td>
+      <td class="num-cell" style="font-weight:700; color:var(--good);">${price100} €</td>
+      <td style="text-align:center;">
+        <span class="score-badge ${scoreClass}">${scoreBadge} ${score}/10</span>
+      </td>
+      <td style="text-align:center; white-space:nowrap;">
+        <button type="button" class="btn-action" title="Редактировать продукт" onclick="openProductModal('edit', ${origIdx})">✏️</button>
+        <button type="button" class="btn-action btn-del" title="Удалить продукт" onclick="openDeleteModal(${origIdx})">🗑️</button>
+      </td>
+    </tr>
+    `;
+  }).join('');
+}
+
+function onProductSearch(val) {
+  renderProductsTable(window._ALL_PRODUCTS);
+}
+
+function openProductModal(mode, idx = null) {
+  const modal = document.getElementById('product-modal');
+  const title = document.getElementById('modal-title');
+  const statusMsg = document.getElementById('modal-status-msg');
+  if (statusMsg) statusMsg.style.display = 'none';
+
+  if (mode === 'edit' && idx !== null && window._ALL_PRODUCTS[idx]) {
+    const p = window._ALL_PRODUCTS[idx];
+    title.innerText = `✏️ Редактировать: ${p.product_name}`;
+    document.getElementById('prod-form-id').value = p.id || '';
+    document.getElementById('prod-form-orig-name').value = p.product_name || '';
+    document.getElementById('prod-name-input').value = p.product_name || '';
+    document.getElementById('prod-category-select').value = p.category || 'general';
+    document.getElementById('prod-weight-input').value = p.weight_g || 100;
+    document.getElementById('prod-price-input').value = (p.price_rub !== undefined && p.price_rub !== null) ? p.price_rub : 0;
+    document.getElementById('prod-p-input').value = p.protein_per_100g || 0;
+    document.getElementById('prod-f-input').value = p.fat_per_100g || 0;
+    document.getElementById('prod-c-input').value = p.carbs_per_100g || 0;
+    document.getElementById('prod-cal-input').value = Math.round(p.calories_per_100g || 0);
+    const sc = p.coach_score || 7;
+    document.getElementById('prod-score-input').value = sc;
+    updateScoreBadgePreview(sc);
+    document.getElementById('prod-verdict-input').value = p.coach_verdict || '';
+  } else {
+    title.innerText = '➕ Добавить продукт';
+    document.getElementById('prod-form-id').value = '';
+    document.getElementById('prod-form-orig-name').value = '';
+    document.getElementById('prod-name-input').value = '';
+    document.getElementById('prod-category-select').value = 'general';
+    document.getElementById('prod-weight-input').value = 100;
+    document.getElementById('prod-price-input').value = '0.00';
+    document.getElementById('prod-p-input').value = 0;
+    document.getElementById('prod-f-input').value = 0;
+    document.getElementById('prod-c-input').value = 0;
+    document.getElementById('prod-cal-input').value = 0;
+    document.getElementById('prod-score-input').value = 7;
+    updateScoreBadgePreview(7);
+    document.getElementById('prod-verdict-input').value = '';
+  }
+
+  calcPricePer100gPreview();
+  onMacroInput();
+  modal.style.display = 'flex';
+  setTimeout(() => { document.getElementById('prod-name-input').focus(); }, 100);
+}
+
+function closeProductModal() {
+  document.getElementById('product-modal').style.display = 'none';
+}
+
+function calcPricePer100gPreview() {
+  const w = parseFloat(document.getElementById('prod-weight-input').value) || 100;
+  const pr = parseFloat(document.getElementById('prod-price-input').value) || 0;
+  const pr100 = (w > 0) ? ((pr / w) * 100).toFixed(2) : '0.00';
+  const el = document.getElementById('prod-price100-preview');
+  if (el) el.innerText = `${pr100} €`;
+}
+
+function onMacroInput() {
+  const p = parseFloat(document.getElementById('prod-p-input').value) || 0;
+  const f = parseFloat(document.getElementById('prod-f-input').value) || 0;
+  const c = parseFloat(document.getElementById('prod-c-input').value) || 0;
+  const formulaCal = Math.round(4 * p + 9 * f + 4 * c);
+  const textEl = document.getElementById('prod-formula-text');
+  if (textEl) {
+    textEl.innerText = `4×${p} + 9×${f} + 4×${c} = ${formulaCal} ккал`;
+  }
+}
+
+function syncCaloriesFromFormula() {
+  const p = parseFloat(document.getElementById('prod-p-input').value) || 0;
+  const f = parseFloat(document.getElementById('prod-f-input').value) || 0;
+  const c = parseFloat(document.getElementById('prod-c-input').value) || 0;
+  const formulaCal = Math.round(4 * p + 9 * f + 4 * c);
+  document.getElementById('prod-cal-input').value = formulaCal;
+  onMacroInput();
+}
+
+function updateScoreBadgePreview(val) {
+  const sc = Math.max(1, Math.min(10, parseInt(val) || 7));
+  const badge = document.getElementById('prod-score-badge');
+  if (!badge) return;
+  badge.className = 'score-badge ' + (sc >= 8 ? 'good' : (sc >= 5 ? 'warn' : 'crit'));
+  const icon = sc >= 8 ? '🟢' : (sc >= 5 ? '🟡' : '🔴');
+  badge.innerText = `${icon} ${sc}/10`;
+}
+
+async function estimateNutritionFromAI() {
+  const name = document.getElementById('prod-name-input').value.trim();
+  if (!name) {
+    alert('Сначала введите название продукта для расчёта через ИИ');
+    document.getElementById('prod-name-input').focus();
+    return;
+  }
+  const btn = document.getElementById('btn-ai-estimate');
+  btn.disabled = true;
+  btn.innerText = '⏳...';
+
+  try {
+    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
+    const res = await fetch(`${apiBase}/api/products/estimate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product_name: name,
+        category: document.getElementById('prod-category-select').value
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.data) {
+      const est = data.data;
+      if (est.category) document.getElementById('prod-category-select').value = est.category;
+      document.getElementById('prod-p-input').value = est.protein_100g || 0;
+      document.getElementById('prod-f-input').value = est.fat_100g || 0;
+      document.getElementById('prod-c-input').value = est.carbs_100g || 0;
+      document.getElementById('prod-cal-input').value = est.calories_100g || 0;
+      if (est.coach_score) {
+        document.getElementById('prod-score-input').value = est.coach_score;
+        updateScoreBadgePreview(est.coach_score);
+      }
+      if (est.coach_verdict) {
+        document.getElementById('prod-verdict-input').value = est.coach_verdict;
+      }
+      onMacroInput();
+      showToast('✨ КБЖУ и оценка рассчитаны через ИИ!');
+    }
+  } catch (err) {
+    console.error('Estimate error:', err);
+    alert('Не удалось рассчитать через ИИ: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerText = '✨ ИИ';
+  }
+}
+
+async function saveProductFromModal() {
+  const name = document.getElementById('prod-name-input').value.trim();
+  if (!name) {
+    alert('Введите название продукта');
+    return;
+  }
+  const pId = document.getElementById('prod-form-id').value;
+  const origName = document.getElementById('prod-form-orig-name').value;
+  const isEdit = !!origName;
+
+  const payload = {
+    action: isEdit ? 'update' : 'add',
+    product_name: name,
+    original_name: origName || undefined,
+    id: pId ? parseInt(pId) : undefined,
+    category: document.getElementById('prod-category-select').value,
+    weight_g: parseFloat(document.getElementById('prod-weight-input').value) || 100,
+    price_rub: parseFloat(document.getElementById('prod-price-input').value) || 0,
+    protein_100g: parseFloat(document.getElementById('prod-p-input').value) || 0,
+    fat_100g: parseFloat(document.getElementById('prod-f-input').value) || 0,
+    carbs_100g: parseFloat(document.getElementById('prod-c-input').value) || 0,
+    calories_100g: parseFloat(document.getElementById('prod-cal-input').value) || 0,
+    coach_score: parseInt(document.getElementById('prod-score-input').value) || 7,
+    coach_verdict: document.getElementById('prod-verdict-input').value.trim()
+  };
+
+  const btnSave = document.getElementById('btn-modal-save');
+  btnSave.disabled = true;
+  btnSave.innerText = '⏳ Сохранение...';
+
+  try {
+    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
+    const endpoint = isEdit ? '/api/products/update' : '/api/products/add';
+    const res = await fetch(`${apiBase}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    closeProductModal();
+    showToast(data.message || (isEdit ? '✓ Продукт обновлен!' : '✓ Продукт добавлен!'));
+    
+    if (data.products) {
+      window._ALL_PRODUCTS = data.products;
+      renderProductsTable(window._ALL_PRODUCTS);
+    }
+    loadLiveDashboard(currentDate);
+  } catch (err) {
+    console.error('Save error:', err);
+    alert('Ошибка при сохранении: ' + err.message);
+  } finally {
+    btnSave.disabled = false;
+    btnSave.innerText = '💾 Сохранить продукт';
+  }
+}
+
+function openDeleteModal(idx) {
+  if (idx === null || !window._ALL_PRODUCTS[idx]) return;
+  window._PRODUCT_TO_DELETE = window._ALL_PRODUCTS[idx];
+  document.getElementById('delete-prod-name-display').innerText = `«${window._PRODUCT_TO_DELETE.product_name}»`;
+  document.getElementById('delete-modal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-modal').style.display = 'none';
+  window._PRODUCT_TO_DELETE = null;
+}
+
+async function confirmDeleteProduct() {
+  if (!window._PRODUCT_TO_DELETE) return;
+  const p = window._PRODUCT_TO_DELETE;
+  const btn = document.getElementById('btn-confirm-delete');
+  btn.disabled = true;
+  btn.innerText = '⏳ Удаление...';
+
+  try {
+    const apiBase = (window.location.protocol === 'file:') ? 'https://fatcaunter.vercel.app' : '';
+    const res = await fetch(`${apiBase}/api/products/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product_name: p.product_name,
+        id: p.id
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    closeDeleteModal();
+    showToast(data.message || `✓ Продукт «${p.product_name}» удален!`);
+    
+    if (data.products) {
+      window._ALL_PRODUCTS = data.products;
+      renderProductsTable(window._ALL_PRODUCTS);
+    }
+    loadLiveDashboard(currentDate);
+  } catch (err) {
+    console.error('Delete error:', err);
+    alert('Ошибка при удалении: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerText = 'Удалить';
+  }
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast-notify');
+  if (!toast) return;
+  toast.innerText = msg;
+  toast.style.display = 'block';
+  setTimeout(() => {
+    toast.style.display = 'none';
+  }, 3500);
 }
 
 function escapeHtml(str) { return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }

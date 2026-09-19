@@ -847,28 +847,300 @@ def clear_recent_meals(limit: int = 5) -> int:
             count += 1
     return count
 
-def delete_product(product_name: str) -> bool:
-    """Deletes a product from product_prices, custom_products, and coach_recommendations."""
-    p_clean = product_name.lower().strip()
+def delete_product_entry(product_name: Optional[str] = None, product_id: Optional[int] = None) -> bool:
+    """Deletes a product by product_name or product_id from product_prices, custom_products, and coach_recommendations."""
+    target_name = (product_name or "").strip().lower()
     with get_connection() as conn:
-        conn.execute("DELETE FROM product_prices WHERE LOWER(product_name) = ?", (p_clean,))
-        conn.execute("DELETE FROM custom_products WHERE LOWER(product_name) = ?", (p_clean,))
-        conn.execute("DELETE FROM coach_recommendations WHERE topic LIKE ?", (f"%{p_clean}%",))
+        cursor = conn.cursor()
+        if product_id and not target_name:
+            row = cursor.execute("SELECT product_name FROM product_prices WHERE id = ?", (product_id,)).fetchone()
+            if row:
+                target_name = str(row["product_name"]).strip().lower()
+
+        if product_id:
+            cursor.execute("DELETE FROM product_prices WHERE id = ?", (product_id,))
+        if target_name:
+            cursor.execute("DELETE FROM product_prices WHERE LOWER(product_name) = ?", (target_name,))
+            cursor.execute("DELETE FROM custom_products WHERE LOWER(product_name) = ?", (target_name,))
+            cursor.execute("DELETE FROM coach_recommendations WHERE LOWER(topic) LIKE ?", (f"%{target_name}%",))
         conn.commit()
 
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            enc = urllib.parse.quote(p_clean)
-            supabase_request(f"product_prices?product_name=ilike.{enc}", method="DELETE")
-            supabase_request(f"custom_products?product_name=ilike.{enc}", method="DELETE")
-            supabase_request(f"coach_recommendations?topic=ilike.*{enc}*", method="DELETE")
+            if product_id:
+                supabase_request(f"product_prices?id=eq.{product_id}", method="DELETE")
+            if target_name:
+                enc = urllib.parse.quote(target_name)
+                supabase_request(f"product_prices?product_name=ilike.{enc}", method="DELETE")
+                supabase_request(f"custom_products?product_name=ilike.{enc}", method="DELETE")
+                supabase_request(f"coach_recommendations?topic=ilike.*{enc}*", method="DELETE")
         except Exception as e:
             print(f"Supabase delete product warning: {e}")
 
     cache_invalidate("product_prices", "product_price_map", "coach_product_verdicts")
     return True
 
+def delete_product(product_name: str) -> bool:
+    """Deletes a product from product_prices, custom_products, and coach_recommendations."""
+    return delete_product_entry(product_name=product_name)
 
+def _evaluate_fallback_coach_macros(product_name: str, cal_100: float, p_100: float, f_100: float, c_100: float, category: str = "general"):
+    prot_cal = p_100 * 4.0
+    fat_cal = f_100 * 9.0
+    carb_cal = c_100 * 4.0
+    tot_cal = max(cal_100, prot_cal + fat_cal + carb_cal, 1.0)
+    prot_ratio = prot_cal / tot_cal
+
+    if category == "sweets" or (c_100 > 40 and f_100 > 15):
+        score = 2
+        verdict = f"Десерт с избытком сахаров ({c_100:.0f}г) и насыщенных жиров ({f_100:.0f}г). Провоцирует скачки инсулина и отложение жира. Употребляйте умеренно."
+    elif prot_ratio >= 0.45:
+        score = 10
+        verdict = f"Превосходный источник чистого белка ({p_100:.1f}г). Идеально подходит для насыщения, защиты мышц и похудения."
+    elif prot_ratio >= 0.25:
+        score = 8
+        verdict = f"Качественный белковый продукт ({p_100:.1f}г белка). Отлично вписывается в сбалансированный спортивный рацион."
+    elif category in ["vegetables", "fruit"]:
+        score = 8
+        verdict = "Богат витаминами и клетчаткой, полезен для пищеварения и иммунитета."
+    elif fat_cal / tot_cal > 0.65:
+        score = 4
+        verdict = f"Высокая плотность жиров ({f_100:.1f}г). Контролируйте размер порции, чтобы не выбиться из дневного калоража."
+    else:
+        score = 6
+        verdict = "Базовый продукт питания. Употребляйте в рамках вашей дневной нормы калорий и БЖУ."
+    return score, verdict
+
+def update_product_price(
+    product_name: str,
+    original_name: Optional[str] = None,
+    product_id: Optional[int] = None,
+    price_rub: float = 0.0,
+    weight_g: float = 100.0,
+    category: str = "general",
+    protein_100g: float = 0.0,
+    fat_100g: float = 0.0,
+    carbs_100g: float = 0.0,
+    calories_100g: float = 0.0,
+    coach_score: int = 0,
+    coach_verdict: str = ""
+) -> Dict[str, Any]:
+    """
+    Updates an existing product in SQLite and Supabase with exact values,
+    validating energy integrity (4P + 9F + 4C) and updating custom_products + coach tips.
+    Supports renaming product when original_name is provided.
+    """
+    new_name = product_name.strip()
+    orig_name = (original_name or "").strip()
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        if product_id and not orig_name:
+            row = cursor.execute("SELECT product_name FROM product_prices WHERE id = ?", (product_id,)).fetchone()
+            if row:
+                orig_name = str(row["product_name"]).strip()
+
+    if not orig_name:
+        orig_name = new_name
+
+    val = validate_product_values(
+        protein_100g=protein_100g,
+        fat_100g=fat_100g,
+        carbs_100g=carbs_100g,
+        calories_100g=calories_100g,
+        price_rub=price_rub,
+        weight_g=weight_g,
+        coach_score=coach_score
+    )
+    p_100 = val["protein_100g"]
+    f_100 = val["fat_100g"]
+    c_100 = val["carbs_100g"]
+    cal_100 = val["calories_100g"]
+    pr_rub = val["price_rub"]
+    w_g = val["weight_g"]
+    score = val["coach_score"]
+    
+    if score <= 0 or not coach_verdict:
+        f_score, f_verdict = _evaluate_fallback_coach_macros(new_name, cal_100, p_100, f_100, c_100, category)
+        score = score or f_score
+        coach_verdict = coach_verdict or f_verdict
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # If product is being renamed, clean up old entry in custom_products
+        if orig_name and orig_name.lower() != new_name.lower():
+            cursor.execute("DELETE FROM custom_products WHERE LOWER(product_name) = ?", (orig_name.lower(),))
+            cursor.execute("DELETE FROM coach_recommendations WHERE LOWER(topic) LIKE ?", (f"%{orig_name.lower()}%",))
+
+        # Check if updating by ID or by name
+        updated = False
+        if product_id:
+            cursor.execute("""
+                UPDATE product_prices
+                SET product_name = ?,
+                    category = ?,
+                    price_rub = ?,
+                    weight_g = ?,
+                    protein_per_100g = ?,
+                    fat_per_100g = ?,
+                    carbs_per_100g = ?,
+                    calories_per_100g = ?,
+                    coach_score = ?,
+                    coach_verdict = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (new_name.lower(), category, pr_rub, w_g, p_100, f_100, c_100, cal_100, score, coach_verdict, product_id))
+            if cursor.rowcount > 0:
+                updated = True
+
+        if not updated:
+            cursor.execute("""
+                UPDATE product_prices
+                SET product_name = ?,
+                    category = ?,
+                    price_rub = ?,
+                    weight_g = ?,
+                    protein_per_100g = ?,
+                    fat_per_100g = ?,
+                    carbs_per_100g = ?,
+                    calories_per_100g = ?,
+                    coach_score = ?,
+                    coach_verdict = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE LOWER(product_name) = ?
+            """, (new_name.lower(), category, pr_rub, w_g, p_100, f_100, c_100, cal_100, score, coach_verdict, orig_name.lower()))
+            if cursor.rowcount == 0:
+                # If product didn't exist, insert it
+                cursor.execute("""
+                    INSERT INTO product_prices
+                    (product_name, category, price_rub, weight_g, protein_per_100g, fat_per_100g, carbs_per_100g, calories_per_100g, coach_score, coach_verdict)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (new_name.lower(), category, pr_rub, w_g, p_100, f_100, c_100, cal_100, score, coach_verdict))
+        conn.commit()
+
+    # Sync custom_products table
+    save_custom_product(new_name, cal_100, p_100, f_100, c_100)
+
+    # Save coach verdict if present
+    if coach_verdict:
+        severity = "info" if score >= 7 else ("warning" if score <= 4 else "tip")
+        save_coach_recommendation(
+            topic=f"Продукт: {new_name.capitalize()} ({score}/10)",
+            recommendation=coach_verdict,
+            severity=severity
+        )
+
+    # Sync with Supabase
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            if orig_name and orig_name.lower() != new_name.lower():
+                enc_orig = urllib.parse.quote(orig_name.lower())
+                supabase_request(f"product_prices?product_name=ilike.{enc_orig}", method="DELETE")
+                supabase_request(f"custom_products?product_name=ilike.{enc_orig}", method="DELETE")
+
+            supabase_request("product_prices?on_conflict=product_name", method="POST", data={
+                "product_name": new_name.lower(),
+                "category": category,
+                "price_rub": pr_rub,
+                "weight_g": w_g,
+                "protein_per_100g": p_100,
+                "fat_per_100g": f_100,
+                "carbs_per_100g": c_100,
+                "calories_per_100g": cal_100
+            }, prefer="resolution=merge-duplicates,return=representation")
+        except Exception as e:
+            print(f"Supabase update price warning: {e}")
+
+    cache_invalidate("product_prices", "product_price_map", "coach_product_verdicts")
+
+    price_100 = round((pr_rub / w_g) * 100, 2) if w_g > 0 else 0.0
+    return {
+        "product_name": new_name.lower(),
+        "category": category,
+        "price_rub": pr_rub,
+        "weight_g": w_g,
+        "price_per_100g": price_100,
+        "protein_per_100g": p_100,
+        "fat_per_100g": f_100,
+        "carbs_per_100g": c_100,
+        "calories_per_100g": cal_100,
+        "coach_score": score,
+        "coach_verdict": coach_verdict
+    }
+
+def estimate_product_nutrition(product_name: str, category: Optional[str] = None) -> Dict[str, Any]:
+    """Estimates macros, calories, category, coach score and verdict for a given product name."""
+    p_name = (product_name or "").strip()
+    if not p_name:
+        return {
+            "product_name": "",
+            "category": "general",
+            "calories_100g": 100,
+            "protein_100g": 5,
+            "fat_100g": 2,
+            "carbs_100g": 15,
+            "coach_score": 6,
+            "coach_verdict": "Базовый продукт питания."
+        }
+
+    # Check if we already have it in custom_products or product_prices
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        row = cursor.execute(
+            "SELECT * FROM product_prices WHERE LOWER(product_name) = ? OR product_name LIKE ?",
+            (p_name.lower(), f"%{p_name.lower()}%")
+        ).fetchone()
+        if row:
+            d = dict(row)
+            return {
+                "product_name": d.get("product_name"),
+                "category": d.get("category") or "general",
+                "calories_100g": d.get("calories_per_100g") or 0,
+                "protein_100g": d.get("protein_per_100g") or 0,
+                "fat_100g": d.get("fat_per_100g") or 0,
+                "carbs_100g": d.get("carbs_per_100g") or 0,
+                "price_rub": d.get("price_rub") or 0,
+                "weight_g": d.get("weight_g") or 100,
+                "coach_score": d.get("coach_score") or 6,
+                "coach_verdict": d.get("coach_verdict") or ""
+            }
+
+    # Try nutrition_agent calculation
+    try:
+        from agents.nutrition_agent import nutrition_agent
+        calc = nutrition_agent.calculate([{"product_name": p_name, "quantity_g": 100}])
+        if calc and len(calc) > 0:
+            m = calc[0]
+            cat = category or m.get("category") or "general"
+            cal = float(m.get("calories", 0))
+            p = float(m.get("protein_g", 0))
+            f = float(m.get("fat_g", 0))
+            c = float(m.get("carbs_g", 0))
+            score, verdict = _evaluate_fallback_coach_macros(p_name, cal, p, f, c, cat)
+            return {
+                "product_name": p_name,
+                "category": cat,
+                "calories_100g": int(round(cal)),
+                "protein_100g": round(p, 1),
+                "fat_100g": round(f, 1),
+                "carbs_100g": round(c, 1),
+                "coach_score": score,
+                "coach_verdict": verdict
+            }
+    except Exception as e:
+        print(f"Estimate nutrition error: {e}")
+
+    score, verdict = _evaluate_fallback_coach_macros(p_name, 120, 4, 3, 18, category or "general")
+    return {
+        "product_name": p_name,
+        "category": category or "general",
+        "calories_100g": 120,
+        "protein_100g": 4.0,
+        "fat_100g": 3.0,
+        "carbs_100g": 18.0,
+        "coach_score": score,
+        "coach_verdict": verdict
+    }
 
 def save_product_price(product_name: str, price_rub: float, weight_g: float = 100.0,
                        category: str = "general", protein_100g: float = 0, fat_100g: float = 0,
