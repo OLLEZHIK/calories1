@@ -33,6 +33,9 @@ def cache_invalidate(*keys: str) -> None:
     else:
         for k in keys:
             _MEM_CACHE.pop(k, None)
+            for m_k in list(_MEM_CACHE.keys()):
+                if m_k.startswith(f"{k}_"):
+                    _MEM_CACHE.pop(m_k, None)
 
 
 def supabase_request(
@@ -1776,7 +1779,7 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float = 10
 
     if SUPABASE_URL and SUPABASE_KEY:
         try:
-            supabase_request("product_prices?on_conflict=product_name", method="POST", data={
+            sp_payload = {
                 "product_name": product_name,
                 "category": category,
                 "price_rub": price_rub,
@@ -1785,8 +1788,15 @@ def save_product_price(product_name: str, price_rub: float, weight_g: float = 10
                 "fat_per_100g": fat_100g,
                 "carbs_per_100g": carbs_100g,
                 "calories_per_100g": calories_100g,
-                "user_id": user_id
-            }, prefer="resolution=merge-duplicates,return=representation")
+            }
+            if user_id is not None:
+                sp_payload["user_id"] = user_id
+
+            sp_res = supabase_request("product_prices?on_conflict=product_name", method="POST", data=sp_payload, prefer="resolution=merge-duplicates,return=representation")
+            if sp_res is None and "user_id" in sp_payload:
+                # Fallback if user_id column does not exist in Supabase schema
+                sp_payload.pop("user_id", None)
+                supabase_request("product_prices?on_conflict=product_name", method="POST", data=sp_payload, prefer="resolution=merge-duplicates,return=representation")
         except Exception as e:
             print(f"Supabase price sync warning: {e}")
 

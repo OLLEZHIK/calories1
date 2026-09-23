@@ -1,13 +1,13 @@
 {
   "status": "success",
   "summary": {
-    "date": "2026-09-19",
-    "total_calories": 6145.0,
-    "total_protein": 478.0,
-    "total_fat": 276.0,
-    "total_carbs": 452.0,
+    "date": "2026-09-23",
+    "total_calories": 575.0,
+    "total_protein": 47.0,
+    "total_fat": 42.0,
+    "total_carbs": 3.0,
     "active_calories": 0,
-    "total_cost_eur": 13.59,
+    "total_cost_eur": 0.73,
     "goals": {
       "calories": 1891,
       "protein_g": 148,
@@ -24,324 +24,467 @@
   },
   "meals": [
     {
-      "id": 95,
-      "timestamp": "2026-09-19 13:38",
-      "raw_input": "Овсянка 200г",
-      "input_type": "text",
-      "meal_type": "Прием пищи",
+      "id": 111,
+      "timestamp": "2026-09-23 07:48",
+      "raw_input": "Завтрак 4 яйца 80 грамм мацарелы",
+      "input_type": "webhook",
+      "meal_type": "Завтрак",
       "items": [
         {
-          "id": 220,
-          "fat_g": 4,
-          "carbs_g": 36,
-          "meal_id": 95,
-          "calories": 200,
-          "category": "general",
-          "protein_g": 8,
-          "quantity_g": 200,
-          "product_name": "овсянка",
-          "price_per_100g": null,
-          "cost_eur": 0.0
-        }
-      ],
-      "total_calories": 200,
-      "total_protein": 8,
-      "total_fat": 4,
-      "total_carbs": 36,
-      "total_cost_eur": 0.0
-    },
-    {
-      "id": 94,
-      "timestamp": "2026-09-19 13:38",
-      "raw_input": "Яичница 2 яйца",
-      "input_type": "text",
-      "meal_type": "Прием пищи",
-      "items": [
-        {
-          "id": 219,
-          "fat_g": 10,
-          "carbs_g": 1,
-          "meal_id": 94,
-          "calories": 150,
-          "category": "general",
-          "protein_g": 12,
-          "quantity_g": 100,
-          "product_name": "яйцо",
-          "price_per_100g": 0.33,
-          "cost_eur": 0.33
-        }
-      ],
-      "total_calories": 150,
-      "total_protein": 12,
-      "total_fat": 10,
-      "total_carbs": 1,
-      "total_cost_eur": 0.33
-    },
-    {
-      "id": 93,
-      "timestamp": "2026-09-19 13:32",
-      "raw_input": "Овсянка 200г",
-      "input_type": "text",
-      "meal_type": "Прием пищи",
-      "items": [
-        {
-          "id": 218,
-          "fat_g": 4,
-          "carbs_g": 36,
-          "meal_id": 93,
-          "calories": 200,
-          "category": "general",
-          "protein_g": 8,
-          "quantity_g": 200,
-          "product_name": "овсянка",
-          "price_per_100g": null,
-          "cost_eur": 0.0
-        }
-      ],
-      "total_calories": 200,
-      "total_protein": 8,
-      "total_fat": 4,
-      "total_carbs": 36,
-      "total_cost_eur": 0.0
-    },
-    {
-      "id": 92,
-      "timestamp": "2026-09-19 13:32",
-      "raw_input": "Яичница 2 яйца",
-      "input_type": "text",
-      "meal_type": "Прием пищи",
-      "items": [
-        {
-          "id": 217,
-          "fat_g": 10,
-          "carbs_g": 1,
-          "meal_id": 92,
-          "calories": 150,
-          "category": "general",
-          "protein_g": 12,
-          "quantity_g": 100,
-          "product_name": "яйцо",
-          "price_per_100g": 0.33,
-          "cost_eur": 0.33
-        }
-      ],
-      "total_calories": 150,
-      "total_protein": 12,
-      "total_fat": 10,
-      "total_carbs": 1,
-      "total_cost_eur": 0.33
-    },
-    {
-      "id": 91,
-      "timestamp": "2026-09-19 12:21",
-      "raw_input": "200г куриная грудка, 150г гречка, 30г майонез",
-      "input_type": "text",
-      "meal_type": "Перекус",
-      "items": [
-        {
-          "id": 214,
-          "fat_g": 7,
-          "carbs_g": 0,
-          "meal_id": 91,
-          "calories": 330,
-          "category": "meat",
-          "protein_g": 62,
-          "quantity_g": 200,
-          "product_name": "куриная грудка",
-          "price_per_100g": 0.85,
-          "cost_eur": 1.7
-        },
-        {
-          "id": 215,
-          "fat_g": 5,
-          "carbs_g": 108,
-          "meal_id": 91,
-          "calories": 514,
-          "category": "grains",
-          "protein_g": 20,
-          "quantity_g": 150,
-          "product_name": "гречка",
-          "price_per_100g": 0.5,
-          "cost_eur": 0.75
-        },
-        {
-          "id": 216,
-          "fat_g": 20,
-          "carbs_g": 1,
-          "meal_id": 91,
-          "calories": 188,
-          "category": "fats_oils",
-          "protein_g": 0,
-          "quantity_g": 30,
-          "product_name": "майонез",
-          "price_per_100g": 0.38,
-          "cost_eur": 0.11
-        }
-      ],
-      "total_calories": 1032,
-      "total_protein": 82,
-      "total_fat": 32,
-      "total_carbs": 109,
-      "total_cost_eur": 2.56
-    },
-    {
-      "id": 90,
-      "timestamp": "2026-09-19 12:21",
-      "raw_input": "5 яиц, 20г масла сливочного, 200г творог 5%",
-      "input_type": "text",
-      "meal_type": "Перекус",
-      "items": [
-        {
-          "id": 211,
-          "fat_g": 30,
-          "carbs_g": 3,
-          "meal_id": 90,
-          "calories": 426,
+          "id": 262,
+          "fat_g": 24,
+          "carbs_g": 2,
+          "meal_id": 111,
+          "calories": 341,
           "category": "eggs_dairy",
-          "protein_g": 36,
-          "quantity_g": 275,
+          "protein_g": 29,
+          "quantity_g": 220,
           "product_name": "куриное яйцо",
           "price_per_100g": 0.33,
-          "cost_eur": 0.91
+          "cost_eur": 0.73
         },
         {
-          "id": 212,
-          "fat_g": 16,
+          "id": 263,
+          "fat_g": 18,
+          "carbs_g": 1,
+          "meal_id": 111,
+          "calories": 234,
+          "category": "openfoodfacts",
+          "protein_g": 18,
+          "quantity_g": 80,
+          "product_name": "моцарелла",
+          "price_per_100g": null,
+          "cost_eur": 0.0
+        }
+      ],
+      "total_calories": 575,
+      "total_protein": 47,
+      "total_fat": 42,
+      "total_carbs": 3,
+      "total_cost_eur": 0.73
+    },
+    {
+      "id": 108,
+      "timestamp": "2026-09-22 17:50",
+      "raw_input": "Ужин 60 грамм риса 40 грамм тунца",
+      "input_type": "webhook",
+      "meal_type": "Ужин",
+      "items": [
+        {
+          "id": 254,
+          "fat_g": 0,
+          "carbs_g": 17,
+          "meal_id": 108,
+          "calories": 78,
+          "category": "grains",
+          "protein_g": 2,
+          "quantity_g": 60,
+          "product_name": "рис",
+          "price_per_100g": 0.17,
+          "cost_eur": 0.1
+        },
+        {
+          "id": 255,
+          "fat_g": 0,
           "carbs_g": 0,
-          "meal_id": 90,
-          "calories": 143,
-          "category": "fats_oils",
+          "meal_id": 108,
+          "calories": 52,
+          "category": "fish",
+          "protein_g": 11,
+          "quantity_g": 40,
+          "product_name": "тунец",
+          "price_per_100g": null,
+          "cost_eur": 0.0
+        }
+      ],
+      "total_calories": 130,
+      "total_protein": 13,
+      "total_fat": 0,
+      "total_carbs": 17,
+      "total_cost_eur": 0.1
+    },
+    {
+      "id": 107,
+      "timestamp": "2026-09-22 16:13",
+      "raw_input": "перекус 110 грамм бранза \n150 грамм курицы",
+      "input_type": "webhook",
+      "meal_type": "Перекус",
+      "items": [
+        {
+          "id": 252,
+          "fat_g": 22,
+          "carbs_g": 1,
+          "meal_id": 107,
+          "calories": 275,
+          "category": "custom",
+          "protein_g": 19,
+          "quantity_g": 110,
+          "product_name": "брынза",
+          "price_per_100g": null,
+          "cost_eur": 0.0
+        },
+        {
+          "id": 253,
+          "fat_g": 12,
+          "carbs_g": 0,
+          "meal_id": 107,
+          "calories": 285,
+          "category": "meat",
+          "protein_g": 40,
+          "quantity_g": 150,
+          "product_name": "курица",
+          "price_per_100g": 0.85,
+          "cost_eur": 1.27
+        }
+      ],
+      "total_calories": 560,
+      "total_protein": 59,
+      "total_fat": 34,
+      "total_carbs": 1,
+      "total_cost_eur": 1.27
+    },
+    {
+      "id": 106,
+      "timestamp": "2026-09-22 11:54",
+      "raw_input": "Обед рис 40 грамм 40 грамм фарш свиной 40 грамм фарш куриный",
+      "input_type": "webhook",
+      "meal_type": "Обед",
+      "items": [
+        {
+          "id": 249,
+          "fat_g": 0,
+          "carbs_g": 11,
+          "meal_id": 106,
+          "calories": 52,
+          "category": "grains",
+          "protein_g": 1,
+          "quantity_g": 40,
+          "product_name": "рис",
+          "price_per_100g": 0.17,
+          "cost_eur": 0.07
+        },
+        {
+          "id": 250,
+          "fat_g": 8,
+          "carbs_g": 0,
+          "meal_id": 106,
+          "calories": 106,
+          "category": "openfoodfacts",
+          "protein_g": 7,
+          "quantity_g": 40,
+          "product_name": "фарш свиной",
+          "price_per_100g": 0.35,
+          "cost_eur": 0.14
+        },
+        {
+          "id": 251,
+          "fat_g": 5,
+          "carbs_g": 7,
+          "meal_id": 106,
+          "calories": 101,
+          "category": "openfoodfacts",
+          "protein_g": 7,
+          "quantity_g": 40,
+          "product_name": "фарш куриный",
+          "price_per_100g": 0.85,
+          "cost_eur": 0.34
+        }
+      ],
+      "total_calories": 259,
+      "total_protein": 15,
+      "total_fat": 13,
+      "total_carbs": 18,
+      "total_cost_eur": 0.55
+    },
+    {
+      "id": 105,
+      "timestamp": "2026-09-22 11:53",
+      "raw_input": "Завтрак 200 грам творога 60 грам йогурта 30 грамм сахара",
+      "input_type": "webhook",
+      "meal_type": "Завтрак",
+      "items": [
+        {
+          "id": 246,
+          "fat_g": 10,
+          "carbs_g": 6,
+          "meal_id": 105,
+          "calories": 242,
+          "category": "eggs_dairy",
+          "protein_g": 36,
+          "quantity_g": 200,
+          "product_name": "творог",
+          "price_per_100g": 0.75,
+          "cost_eur": 1.5
+        },
+        {
+          "id": 247,
+          "fat_g": 2,
+          "carbs_g": 3,
+          "meal_id": 105,
+          "calories": 40,
+          "category": "custom",
+          "protein_g": 2,
+          "quantity_g": 60,
+          "product_name": "йогурт",
+          "price_per_100g": 0.15,
+          "cost_eur": 0.09
+        },
+        {
+          "id": 248,
+          "fat_g": 0,
+          "carbs_g": 30,
+          "meal_id": 105,
+          "calories": 119,
+          "category": "custom",
+          "protein_g": 0,
+          "quantity_g": 30,
+          "product_name": "сахар",
+          "price_per_100g": 0.07,
+          "cost_eur": 0.02
+        }
+      ],
+      "total_calories": 401,
+      "total_protein": 38,
+      "total_fat": 12,
+      "total_carbs": 39,
+      "total_cost_eur": 1.61
+    },
+    {
+      "id": 104,
+      "timestamp": "2026-09-21 17:57",
+      "raw_input": "Ужин курица 100 грамм макороны 50 грамм",
+      "input_type": "webhook",
+      "meal_type": "Ужин",
+      "items": [
+        {
+          "id": 244,
+          "fat_g": 8,
+          "carbs_g": 0,
+          "meal_id": 104,
+          "calories": 190,
+          "category": "meat",
+          "protein_g": 27,
+          "quantity_g": 100,
+          "product_name": "курица",
+          "price_per_100g": 0.85,
+          "cost_eur": 0.85
+        },
+        {
+          "id": 245,
+          "fat_g": 1,
+          "carbs_g": 12,
+          "meal_id": 104,
+          "calories": 66,
+          "category": "grains",
+          "protein_g": 2,
+          "quantity_g": 50,
+          "product_name": "макароны",
+          "price_per_100g": null,
+          "cost_eur": 0.0
+        }
+      ],
+      "total_calories": 256,
+      "total_protein": 29,
+      "total_fat": 9,
+      "total_carbs": 12,
+      "total_cost_eur": 0.85
+    },
+    {
+      "id": 103,
+      "timestamp": "2026-09-21 15:45",
+      "raw_input": "перекус 1 яйцо 10 грамм брынзы 20 грамм сахара",
+      "input_type": "webhook",
+      "meal_type": "Перекус",
+      "items": [
+        {
+          "id": 241,
+          "fat_g": 6,
+          "carbs_g": 1,
+          "meal_id": 103,
+          "calories": 85,
+          "category": "eggs_dairy",
+          "protein_g": 7,
+          "quantity_g": 55,
+          "product_name": "куриное яйцо",
+          "price_per_100g": 0.33,
+          "cost_eur": 0.18
+        },
+        {
+          "id": 242,
+          "fat_g": 2,
+          "carbs_g": 0,
+          "meal_id": 103,
+          "calories": 25,
+          "category": "custom",
+          "protein_g": 2,
+          "quantity_g": 10,
+          "product_name": "брынза",
+          "price_per_100g": null,
+          "cost_eur": 0.0
+        },
+        {
+          "id": 243,
+          "fat_g": 0,
+          "carbs_g": 20,
+          "meal_id": 103,
+          "calories": 80,
+          "category": "custom",
           "protein_g": 0,
           "quantity_g": 20,
-          "product_name": "масло сливочное",
-          "price_per_100g": 0.22,
-          "cost_eur": 0.04
+          "product_name": "сахар",
+          "price_per_100g": 0.07,
+          "cost_eur": 0.01
         }
       ],
-      "total_calories": 569,
-      "total_protein": 36,
-      "total_fat": 46,
-      "total_carbs": 3,
-      "total_cost_eur": 0.95
+      "total_calories": 190,
+      "total_protein": 9,
+      "total_fat": 8,
+      "total_carbs": 21,
+      "total_cost_eur": 0.19
     },
     {
-      "id": 88,
-      "timestamp": "2026-09-19 12:21",
-      "raw_input": "Яичница 2 яйца",
-      "input_type": "text",
-      "meal_type": "Прием пищи",
+      "id": 102,
+      "timestamp": "2026-09-21 15:12",
+      "raw_input": "Обед 70 грамм брынза 40 30 грамм курица грамм свиной фарш картошка 60 грамм",
+      "input_type": "webhook",
+      "meal_type": "Обед",
       "items": [
         {
-          "id": 209,
-          "fat_g": 10,
+          "id": 238,
+          "fat_g": 14,
           "carbs_g": 1,
-          "meal_id": 88,
-          "calories": 150,
-          "category": "general",
+          "meal_id": 102,
+          "calories": 175,
+          "category": "custom",
           "protein_g": 12,
-          "quantity_g": 100,
-          "product_name": "яйцо",
-          "price_per_100g": 0.33,
-          "cost_eur": 0.33
+          "quantity_g": 70,
+          "product_name": "брынза",
+          "price_per_100g": null,
+          "cost_eur": 0.0
+        },
+        {
+          "id": 239,
+          "fat_g": 2,
+          "carbs_g": 0,
+          "meal_id": 102,
+          "calories": 57,
+          "category": "meat",
+          "protein_g": 8,
+          "quantity_g": 30,
+          "product_name": "курица",
+          "price_per_100g": 0.85,
+          "cost_eur": 0.26
+        },
+        {
+          "id": 240,
+          "fat_g": 3,
+          "carbs_g": 11,
+          "meal_id": 102,
+          "calories": 90,
+          "category": "general",
+          "protein_g": 5,
+          "quantity_g": 60,
+          "product_name": "картошка",
+          "price_per_100g": 0.05,
+          "cost_eur": 0.03
         }
       ],
-      "total_calories": 150,
-      "total_protein": 12,
-      "total_fat": 10,
-      "total_carbs": 1,
-      "total_cost_eur": 0.33
+      "total_calories": 322,
+      "total_protein": 25,
+      "total_fat": 19,
+      "total_carbs": 12,
+      "total_cost_eur": 0.29
     },
     {
-      "id": 81,
-      "timestamp": "2026-09-19 12:19",
-      "raw_input": "Овсянка 200г",
-      "input_type": "text",
-      "meal_type": "Прием пищи",
+      "id": 101,
+      "timestamp": "2026-09-21 10:17",
+      "raw_input": "Перекус 70 грамм бисквит",
+      "input_type": "webhook",
+      "meal_type": "Перекус",
       "items": [
         {
-          "id": 202,
+          "id": 237,
           "fat_g": 4,
-          "carbs_g": 36,
-          "meal_id": 81,
-          "calories": 200,
-          "category": "general",
-          "protein_g": 8,
-          "quantity_g": 200,
-          "product_name": "овсянка",
+          "carbs_g": 35,
+          "meal_id": 101,
+          "calories": 192,
+          "category": "custom",
+          "protein_g": 5,
+          "quantity_g": 70,
+          "product_name": "бисквит",
           "price_per_100g": null,
           "cost_eur": 0.0
         }
       ],
-      "total_calories": 200,
-      "total_protein": 8,
+      "total_calories": 192,
+      "total_protein": 5,
       "total_fat": 4,
-      "total_carbs": 36,
+      "total_carbs": 35,
       "total_cost_eur": 0.0
     },
     {
-      "id": 80,
-      "timestamp": "2026-09-19 12:19",
-      "raw_input": "Яичница 2 яйца",
-      "input_type": "text",
-      "meal_type": "Прием пищи",
+      "id": 100,
+      "timestamp": "2026-09-21 10:16",
+      "raw_input": "Обед фарш свиной 50 грамм курица 50 грамм рис 100 грамм",
+      "input_type": "webhook",
+      "meal_type": "Обед",
       "items": [
         {
-          "id": 201,
+          "id": 234,
           "fat_g": 10,
-          "carbs_g": 1,
-          "meal_id": 80,
-          "calories": 150,
-          "category": "general",
-          "protein_g": 12,
-          "quantity_g": 100,
-          "product_name": "яйцо",
-          "price_per_100g": 0.33,
-          "cost_eur": 0.33
-        }
-      ],
-      "total_calories": 150,
-      "total_protein": 12,
-      "total_fat": 10,
-      "total_carbs": 1,
-      "total_cost_eur": 0.33
-    },
-    {
-      "id": 79,
-      "timestamp": "2026-09-19 12:19",
-      "raw_input": "Овсянка 200г",
-      "input_type": "text",
-      "meal_type": "Прием пищи",
-      "items": [
-        {
-          "id": 200,
-          "fat_g": 4,
-          "carbs_g": 36,
-          "meal_id": 79,
-          "calories": 200,
-          "category": "general",
+          "carbs_g": 0,
+          "meal_id": 100,
+          "calories": 132,
+          "category": "openfoodfacts",
           "protein_g": 8,
-          "quantity_g": 200,
-          "product_name": "овсянка",
-          "price_per_100g": null,
-          "cost_eur": 0.0
+          "quantity_g": 50,
+          "product_name": "фарш свиной",
+          "price_per_100g": 0.35,
+          "cost_eur": 0.17
+        },
+        {
+          "id": 235,
+          "fat_g": 4,
+          "carbs_g": 0,
+          "meal_id": 100,
+          "calories": 95,
+          "category": "meat",
+          "protein_g": 14,
+          "quantity_g": 50,
+          "product_name": "курица",
+          "price_per_100g": 0.85,
+          "cost_eur": 0.42
+        },
+        {
+          "id": 236,
+          "fat_g": 0,
+          "carbs_g": 28,
+          "meal_id": 100,
+          "calories": 130,
+          "category": "grains",
+          "protein_g": 3,
+          "quantity_g": 100,
+          "product_name": "рис",
+          "price_per_100g": 0.17,
+          "cost_eur": 0.17
         }
       ],
-      "total_calories": 200,
-      "total_protein": 8,
-      "total_fat": 4,
-      "total_carbs": 36,
-      "total_cost_eur": 0.0
+      "total_calories": 357,
+      "total_protein": 25,
+      "total_fat": 14,
+      "total_carbs": 28,
+      "total_cost_eur": 0.76
     }
   ],
   "coach": {
     "summary": {
-      "date": "2026-09-19",
-      "total_calories": 6145.0,
-      "total_protein": 478.0,
-      "total_fat": 276.0,
-      "total_carbs": 452.0,
+      "date": "2026-09-23",
+      "total_calories": 575.0,
+      "total_protein": 47.0,
+      "total_fat": 42.0,
+      "total_carbs": 3.0,
       "active_calories": 0,
-      "total_cost_eur": 13.59,
+      "total_cost_eur": 0.73,
       "goals": {
         "calories": 1891,
         "protein_g": 148,
@@ -360,17 +503,17 @@
       {
         "topic": "Gemini Coach",
         "severity": "info",
-        "message": "Замените майонез и сливочное масло на источники полезных жиров: оливковое масло, авокадо или орехи."
+        "message": "В приёмах пищи отсутствуют овощи. Добавляйте свежие овощи или зелень для улучшения пищеварения и сытости без лишних калорий."
       },
       {
         "topic": "Gemini Coach",
         "severity": "tip",
-        "message": "В рационе полностью отсутствуют овощи и фрукты. Добавьте свежую зелень и клетчатку к приемам пищи."
+        "message": "Вы съели 9 яиц за день. Чтобы снизить жирность рациона при сохранении белка, заменяйте часть цельных яиц на яичные белки."
       },
       {
         "topic": "Gemini Coach",
         "severity": "warning",
-        "message": "Калорийность превышена более чем в 4 раза (7988 ккал). Проверьте дневник — возможно, дублируются записи."
+        "message": "Вы сильно превысили дневную норму жиров (130 г вместо 67 г) и калорий. Сократите добавленные жиры: майонез, сливочное масло и жирные сыры."
       }
     ]
   },
@@ -757,12 +900,13 @@
     }
   ],
   "history": {
-    "2026-09-19": 6145,
+    "2026-09-23": 575,
+    "2026-09-22": 1350,
+    "2026-09-21": 1873,
+    "2026-09-20": 584,
+    "2026-09-19": 5745,
     "2026-09-18": 1911,
     "2026-09-17": 1687,
-    "2026-09-16": 1708,
-    "2026-09-15": 1781,
-    "2026-09-14": 1407,
-    "2026-09-13": 2076
+    "2026-09-16": 1708
   }
 }

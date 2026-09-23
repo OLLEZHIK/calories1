@@ -9,7 +9,7 @@ except ImportError:
     pass
 from database.db import (
     get_today_summary, save_product_price, save_coach_recommendation, save_meal,
-    get_product_price_map, find_item_price_per_100g
+    get_product_price_map, find_item_price_per_100g, are_product_duplicates
 )
 from agents.ingestion_agent import ingestion_agent, process_add_product
 from agents.nutrition_agent import nutrition_agent
@@ -122,6 +122,7 @@ class TeamLeadAgent:
     """
     def __init__(self):
         self.name = "TeamLeadAgent"
+        self.last_pending_product = None
 
     def _classify_intent_llm(self, text: str) -> str | None:
         """
@@ -163,6 +164,7 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
         return None
 
     def route_input(self, raw_text: str, input_type: str = "text", image_bytes: bytes = None) -> str:
+        self.last_pending_product = None
         if not raw_text and not image_bytes:
             return "⚠️ Пустое сообщение. Напишите или надиктуйте еду (например: '200г творога, 2 яйца')."
 
@@ -300,6 +302,20 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
         if not llm_meals:
             parsed_items = ingestion_agent.parse(raw_text, image_bytes=image_bytes)
             if not parsed_items:
+                # Check if user entered a standalone product name (e.g. "сыр сулугуни" or "протеиновый пудинг")
+                cleaned_text = (raw_text or "").strip()
+                if (cleaned_text and len(cleaned_text) <= 50 and 
+                        not any(w in text_lower for w in ["привет", "здравствуй", "пока", "спасибо", "меню", "таск", "баг", "как", "почему"])):
+                    try:
+                        from agents.ingestion_agent import fetch_internet_product_nutrition, format_new_product_prompt
+                        prod_info = fetch_internet_product_nutrition(cleaned_text)
+                        if prod_info and prod_info.get("product_name") and prod_info.get("calories_100g", 0) > 0:
+                            self.last_pending_product = prod_info
+                            msg, _ = format_new_product_prompt(prod_info)
+                            return msg
+                    except Exception as e:
+                        print(f"Standalone product recognition error: {e}")
+
                 return (
                     "🤔 **Не удалось автоматически определить тип сообщения.**\n\n"
                     "Вы хотите записать еду или отправить задачу ИИ-ассистенту?\n\n"
@@ -360,6 +376,22 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
         if not saved_meal_responses:
             return "⚠️ Не удалось записать продукты из вашего сообщения."
 
+        # Detect products in this meal that are missing in the price catalog
+        missing_names = []
+        for m_data in llm_meals:
+            for item in m_data.get("items", []):
+                p_name = (item.get("product_name") or "").strip()
+                if p_name and find_item_price_per_100g(p_name, price_map) is None:
+                    if not any(are_product_duplicates(p_name, m) for m in missing_names):
+                        missing_names.append(p_name)
+
+        if missing_names:
+            try:
+                from agents.ingestion_agent import fetch_internet_product_nutrition
+                self.last_pending_product = fetch_internet_product_nutrition(missing_names[0])
+            except Exception as e:
+                print(f"Error fetching internet nutrition for pending product: {e}")
+
         # Fast summary using preloaded in-memory cached price map
         today = get_today_summary(price_map=price_map)
         day_cost_str = f" | 💰 {today.get('total_cost_eur', 0):.2f} €" if today.get('total_cost_eur', 0) > 0 else ""
@@ -372,6 +404,14 @@ Reply with ONLY one word: food, task, summary, coach, or price"""
         )
 
         return response
+
+    def route_input_with_details(self, raw_text: str, input_type: str = "text", image_bytes: bytes = None) -> Dict[str, Any]:
+        """Routes user input and returns both response text and any detected pending product."""
+        resp = self.route_input(raw_text, input_type=input_type, image_bytes=image_bytes)
+        return {
+            "response": resp,
+            "pending_product": self.last_pending_product
+        }
 
 
 

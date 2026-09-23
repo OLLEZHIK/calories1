@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agents.audio_agent import audio_agent
 from agents.ingestion_agent import process_add_product, format_products_catalog
-from bot.telegram_bot import process_task_input, process_user_meal_input
+from bot.telegram_bot import process_task_input, process_user_meal_input, process_user_meal_input_with_details
 from bot.meal_cleanup import (
     get_clear_records_view,
     handle_delete_meal_action,
@@ -220,6 +220,13 @@ class handler(BaseHTTPRequestHandler):
                             edit_telegram_message(token, chat_id, msg_id, "❌ Операция очистки записей отменена.", None)
                         else:
                             send_telegram_message(token, chat_id, "❌ Операция очистки записей отменена.")
+                    elif cb_data == "skip_pending_product":
+                        set_mode(chat_id, None)
+                        answer_callback_query(token, cb_id, "Пропущено")
+                        if msg_id:
+                            edit_telegram_message(token, chat_id, msg_id, "❌ Добавление цены продукта пропущено.", None)
+                        else:
+                            send_telegram_message(token, chat_id, "❌ Добавление цены продукта пропущено.")
                 self._respond_ok()
                 return
 
@@ -235,28 +242,49 @@ class handler(BaseHTTPRequestHandler):
                 transcription = result.get("text", "")
                 if transcription:
                     if mode == MODE_ADD_PRODUCT:
-                        routed = process_add_product(raw_text=transcription)
+                        set_mode(chat_id, None)
+                        reply = f"🎤 **Распознано**:\n*\"{transcription}\"*\n\n" + process_add_product(raw_text=transcription)
+                        send_telegram_message(token, chat_id, reply)
                     elif mode == MODE_TASK:
-                        routed = process_task_input(transcription)
+                        set_mode(chat_id, None)
+                        reply = f"🎤 **Распознано**:\n*\"{transcription}\"*\n\n" + process_task_input(transcription)
+                        send_telegram_message(token, chat_id, reply)
                     else:
-                        routed = process_user_meal_input(transcription, input_type="voice")
-                    reply = f"🎤 **Распознано**:\n*\"{transcription}\"*\n\n{routed}"
+                        set_mode(chat_id, None)
+                        res_det = process_user_meal_input_with_details(transcription, input_type="voice")
+                        reply = f"🎤 **Распознано**:\n*\"{transcription}\"*\n\n" + res_det["response"]
+                        send_telegram_message(token, chat_id, reply)
+                        pending = res_det.get("pending_product")
+                        if pending:
+                            set_mode(chat_id, f"await_product_price:{json.dumps(pending, ensure_ascii=False)}")
+                            from agents.ingestion_agent import format_new_product_prompt
+                            p_text, p_markup = format_new_product_prompt(pending)
+                            send_telegram_message(token, chat_id, p_text, reply_markup=p_markup)
                 else:
-                    reply = "⚠️ Не удалось распознать голосовое сообщение. Отправьте еду текстом."
-                set_mode(chat_id, None)
+                    set_mode(chat_id, None)
+                    send_telegram_message(token, chat_id, "⚠️ Не удалось распознать голосовое сообщение. Отправьте еду текстом.")
             elif message.get("photo"):
                 image_bytes = get_telegram_file_bytes(token, message["photo"][-1].get("file_id", ""))
                 if not image_bytes:
-                    reply = "⚠️ Не удалось скачать фотографию. Попробуйте ещё раз."
+                    send_telegram_message(token, chat_id, "⚠️ Не удалось скачать фотографию. Попробуйте ещё раз.")
                 elif mode == MODE_ADD_PRODUCT:
+                    set_mode(chat_id, None)
                     reply = process_add_product(raw_text=message.get("caption", ""), image_bytes=image_bytes)
+                    send_telegram_message(token, chat_id, reply)
                 else:
-                    reply = "📷 **Фото блюда обработано!**\n\n" + process_user_meal_input(message.get("caption", ""), input_type="photo", image_bytes=image_bytes)
-                set_mode(chat_id, None)
+                    set_mode(chat_id, None)
+                    res_det = process_user_meal_input_with_details(message.get("caption", ""), input_type="photo", image_bytes=image_bytes)
+                    send_telegram_message(token, chat_id, f"📷 **Фото блюда обработано!**\n\n{res_det['response']}")
+                    pending = res_det.get("pending_product")
+                    if pending:
+                        set_mode(chat_id, f"await_product_price:{json.dumps(pending, ensure_ascii=False)}")
+                        from agents.ingestion_agent import format_new_product_prompt
+                        p_text, p_markup = format_new_product_prompt(pending)
+                        send_telegram_message(token, chat_id, p_text, reply_markup=p_markup)
             else:
                 reply = self._handle_text(chat_id, (message.get("text") or "").strip(), mode)
-            if reply:
-                send_telegram_message(token, chat_id, reply)
+                if reply:
+                    send_telegram_message(token, chat_id, reply)
         except Exception:
             print(f"Webhook exception:\n{traceback.format_exc()}")
             try:
@@ -313,6 +341,60 @@ class handler(BaseHTTPRequestHandler):
         if text in ("💡 Советы ИИ-тренера", "/coach"):
             set_mode(chat_id, None)
             return format_coach()
+        if mode and mode.startswith("await_product_price:"):
+            from agents.ingestion_agent import parse_entered_price
+            from database.db import save_custom_product, save_product_price
+
+            if text.lower() in ["отмена", "пропустить", "skip", "нет", "/cancel"]:
+                set_mode(chat_id, None)
+                return "❌ Добавление цены продукта отменено."
+
+            price = parse_entered_price(text)
+            if price is not None:
+                try:
+                    prod_data = json.loads(mode[len("await_product_price:"):])
+                    p_name = prod_data["product_name"]
+                    cal = float(prod_data.get("calories_100g") or 0.0)
+                    p = float(prod_data.get("protein_100g") or 0.0)
+                    f = float(prod_data.get("fat_100g") or 0.0)
+                    c = float(prod_data.get("carbs_100g") or 0.0)
+                    w = float(prod_data.get("weight_g") or 100.0)
+                    cat = prod_data.get("category") or "general"
+                    score = int(prod_data.get("coach_score") or 6)
+                    verdict = prod_data.get("coach_verdict") or ""
+
+                    save_custom_product(p_name, cal, p, f, c)
+                    save_product_price(p_name, price, w, cat, p, f, c, cal, score, verdict, user_id=1)
+                    set_mode(chat_id, None)
+
+                    p_100 = round((price / w) * 100, 2) if w > 0 else price
+                    return (
+                        f"✅ **Продукт «{p_name.capitalize()}» успешно добавлен в базу и каталог!**\n\n"
+                        f"💰 Цена: **{price:.2f} €** ({p_100:.2f} € за 100г)\n"
+                        f"📊 КБЖУ (на 100г): {int(round(cal))} ккал | Б:{p}г | Ж:{f}г | У:{c}г\n\n"
+                        f"🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)"
+                    )
+                except Exception as e:
+                    print(f"Error saving pending product price in webhook: {e}")
+
+            if not text.startswith("/") and text not in [
+                "🍲 Запись приема пищи", "➕ Добавить продукт", "📊 Итоги за сегодня",
+                "💡 Советы ИИ-тренера", "📋 Список продуктов", "🗑 Очистить записи", "👨‍💼 Технический таск"
+            ]:
+                prompt_markup = {
+                    "inline_keyboard": [
+                        [{"text": "❌ Пропустить добавление цены", "callback_data": "skip_pending_product"}]
+                    ]
+                }
+                send_telegram_message(
+                    token, chat_id,
+                    "⚠️ **Пожалуйста, введите цену числом** (например: *«2.50»* или *«2.5 евро»*) или нажмите кнопку «Пропустить».",
+                    reply_markup=prompt_markup
+                )
+                return ""
+            else:
+                set_mode(chat_id, None)
+
         if mode == MODE_CLEAR:
             del_res = parse_and_execute_text_delete(text)
             if del_res:
@@ -325,8 +407,23 @@ class handler(BaseHTTPRequestHandler):
         if mode == MODE_ADD_PRODUCT:
             set_mode(chat_id, None)
             return process_add_product(raw_text=text)
+        if mode == MODE_TASK:
+            set_mode(chat_id, None)
+            return process_task_input(text)
+
         set_mode(chat_id, None)
-        return process_task_input(text) if mode == MODE_TASK else process_user_meal_input(text, input_type="webhook")
+        res_det = process_user_meal_input_with_details(text, input_type="webhook")
+        reply = res_det["response"]
+        pending = res_det.get("pending_product")
+        if pending:
+            set_mode(chat_id, f"await_product_price:{json.dumps(pending, ensure_ascii=False)}")
+            from agents.ingestion_agent import format_new_product_prompt
+            p_text, p_markup = format_new_product_prompt(pending)
+            send_telegram_message(token, chat_id, reply)
+            send_telegram_message(token, chat_id, p_text, reply_markup=p_markup)
+            return ""
+
+        return reply
 
     def _respond_ok(self) -> None:
         self.send_response(200)

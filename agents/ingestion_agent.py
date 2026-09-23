@@ -2,7 +2,7 @@ import os
 import re
 import json
 import urllib.request
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 
 try:
     import config  # noqa: F401 - ensures .env is loaded into os.environ
@@ -515,16 +515,15 @@ Return ONLY a valid JSON object in this exact format:
     # Save to custom_products
     save_custom_product(product_name, cal_100, p_100, f_100, c_100)
 
-    # Save to product_prices if price present
-    price_per_100g = None
-    if price is not None:
-        price_per_100g = round((price / weight_g) * 100, 2)
-        save_product_price(product_name, price, weight_g, category, p_100, f_100, c_100, cal_100, coach_score, coach_verdict)
-        try:
-            from agents.economy_agent import economy_agent
-            economy_agent.audit_and_clean_catalog()
-        except Exception as e:
-            print(f"Catalog audit warning: {e}")
+    # Save to product_prices
+    price_val = price if price is not None else 0.0
+    price_per_100g = round((price_val / weight_g) * 100, 2) if (price is not None and weight_g > 0) else None
+    save_product_price(product_name, price_val, weight_g, category, p_100, f_100, c_100, cal_100, coach_score, coach_verdict)
+    try:
+        from agents.economy_agent import economy_agent
+        economy_agent.audit_and_clean_catalog()
+    except Exception as e:
+        print(f"Catalog audit warning: {e}")
 
     # Calculate totals for entire package/weight
     ratio = weight_g / 100.0
@@ -653,3 +652,171 @@ def format_products_catalog() -> str:
     lines.append("\n💡 Чтобы добавить продукт, нажмите кнопку **«➕ Добавить продукт»**.")
     lines.append("🌐 [Открыть онлайн-таблицу на Vercel](https://fatcaunter.vercel.app)")
     return "\n".join(lines)
+
+
+def fetch_internet_product_nutrition(product_name: str) -> Dict[str, Any]:
+    """
+    Searches or estimates accurate commercial nutritional parameters (per 100g),
+    typical package weight, category, and coach rating for a food product via Gemini AI or OpenFoodFacts.
+    """
+    from gemini_client import get_genai_client
+    from database.db import validate_product_values, estimate_product_nutrition
+
+    cleaned_name = product_name.strip()
+    client = get_genai_client()
+
+    if client:
+        try:
+            from google.genai import types
+            model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+
+            prompt = f"""You are an expert nutrition database and personal fitness coach.
+The user is adding or has eaten a food item: "{cleaned_name}".
+
+Find or accurately estimate the actual commercial nutritional values per 100g in Europe/CIS:
+- "product_name": Clean Russian title (e.g. "Протеиновый пудинг Ehrmann", "Сыр Сулугуни", "Овсяное молоко").
+- "calories_100g": Energy in kcal per 100g.
+- "protein_100g": Protein in grams per 100g.
+- "fat_100g": Fat in grams per 100g.
+- "carbs_100g": Carbohydrates in grams per 100g.
+- "weight_g": Standard package or typical portion net weight in grams (e.g. 200 for pudding, 100 for bar/chocolate, 500 for milk, 800 for cake. Default 100 if unknown).
+- "category": Best match among: "meat", "fish", "eggs_dairy", "fats_oils", "vegetables", "fruit", "grains", "bakery", "sweets", "general".
+- "coach_score": Fitness rating from 1 to 10 (1-3 empty calories/high sugar/trans-fat, 4-6 moderate, 7-8 wholesome whole food, 9-10 top fitness protein food).
+- "coach_verdict": 1-2 concise Russian sentences analyzing the BJU ratio and fitness suitability.
+
+Return ONLY a valid JSON object:
+{{
+  "product_name": "{cleaned_name}",
+  "calories_100g": 120.0,
+  "protein_100g": 10.0,
+  "fat_100g": 1.5,
+  "carbs_100g": 15.0,
+  "weight_g": 200.0,
+  "category": "eggs_dairy",
+  "coach_score": 8,
+  "coach_verdict": "Отличный источник белка с низким содержанием жира."
+}}"""
+
+            resp = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=1000)
+            )
+            raw = (resp.text or "").strip()
+            if "```json" in raw:
+                raw = raw.split("```json")[1].split("```")[0].strip()
+            elif "```" in raw:
+                raw = raw.split("```")[1].split("```")[0].strip()
+
+            m = re.search(r'(\{[\s\S]*\})', raw)
+            if m:
+                data = json.loads(m.group(1))
+                cal = float(data.get("calories_100g") or 0.0)
+                p = float(data.get("protein_100g") or 0.0)
+                f = float(data.get("fat_100g") or 0.0)
+                c = float(data.get("carbs_100g") or 0.0)
+                w = float(data.get("weight_g") or 100.0)
+                if w <= 0:
+                    w = 100.0
+                score = int(data.get("coach_score") or 6)
+                cat = data.get("category") or "general"
+                verdict = (data.get("coach_verdict") or "").strip()
+                val = validate_product_values(
+                    protein_100g=p,
+                    fat_100g=f,
+                    carbs_100g=c,
+                    calories_100g=cal,
+                    weight_g=w,
+                    coach_score=score
+                )
+                return {
+                    "product_name": data.get("product_name") or cleaned_name,
+                    "calories_100g": val["calories_100g"],
+                    "protein_100g": val["protein_100g"],
+                    "fat_100g": val["fat_100g"],
+                    "carbs_100g": val["carbs_100g"],
+                    "weight_g": val["weight_g"],
+                    "category": cat,
+                    "coach_score": val["coach_score"],
+                    "coach_verdict": verdict or "Питательный продукт, подходит для сбалансированного рациона."
+                }
+        except Exception as e:
+            print(f"fetch_internet_product_nutrition Gemini error: {e}")
+
+    # Fallback to local / OpenFoodFacts calculation
+    est = estimate_product_nutrition(cleaned_name)
+    return {
+        "product_name": cleaned_name,
+        "calories_100g": est.get("calories_100g", 150),
+        "protein_100g": est.get("protein_100g", 5.0),
+        "fat_100g": est.get("fat_100g", 5.0),
+        "carbs_100g": est.get("carbs_100g", 20.0),
+        "weight_g": 100.0,
+        "category": est.get("category", "general"),
+        "coach_score": est.get("coach_score", 6),
+        "coach_verdict": est.get("coach_verdict", "Информация рассчитана по справочным данным.")
+    }
+
+
+def parse_entered_price(text: str) -> Optional[float]:
+    """
+    Extracts numeric price from user response like '2.50', '2,5 евро', '150 руб', '3€', etc.
+    Returns float or None if cancelled/invalid.
+    """
+    t = text.strip().lower()
+    if any(w in t for w in ["отмена", "отменить", "пропустить", "skip", "не надо", "нет"]):
+        return None
+
+    # Handle rubles: e.g. "200 руб", "150 рублей", "200р" -> convert roughly to EUR (~100 RUB = 1 EUR)
+    m_rub = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:руб|р\b)', t)
+    if m_rub:
+        rub_val = float(m_rub.group(1).replace(",", "."))
+        return round(max(0.01, rub_val / 100.0), 2)
+
+    # Check standard euro or naked number: e.g. "2.5", "2,50", "2.50 €", "2.5 евро", "€2.5"
+    m = re.search(r'(\d+(?:[.,]\d+)?)', t)
+    if m:
+        try:
+            val = float(m.group(1).replace(",", "."))
+            if val > 0:
+                return round(val, 2)
+        except ValueError:
+            pass
+    return None
+
+
+def format_new_product_prompt(product_info: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+    """
+    Formats Telegram markdown message asking user to confirm product KBJU and enter price.
+    Returns (message_text, inline_markup_dict).
+    """
+    name = (product_info.get("product_name") or "Продукт").strip().capitalize()
+    cal = int(round(float(product_info.get("calories_100g") or 0)))
+    p = round(float(product_info.get("protein_100g") or 0), 1)
+    f = round(float(product_info.get("fat_100g") or 0), 1)
+    c = round(float(product_info.get("carbs_100g") or 0), 1)
+    w = int(round(float(product_info.get("weight_g") or 100)))
+    score = int(product_info.get("coach_score") or 7)
+    verdict = (product_info.get("coach_verdict") or "").strip()
+
+    score_emoji = "🟢" if score >= 8 else ("🟡" if score >= 5 else "🔴")
+
+    msg = (
+        f"🔍 **Обнаружен новый продукт, которого нет в каталоге!**\n\n"
+        f"Вы имеете в виду: **«{name}»**?\n\n"
+        f"📊 **КБЖУ из сети (на 100г)**:\n"
+        f"• 🔥 Калории: **{cal} ккал**\n"
+        f"• 🥩 Белки: **{p} г**\n"
+        f"• 🥑 Жиры: **{f} г**\n"
+        f"• 🍚 Углеводы: **{c} г**\n"
+        f"{score_emoji} *Тренер ({score}/10)*: _{verdict}_\n\n"
+        f"💰 **Введите цену** за упаковку ({w}г) или за 100г (например: *«2.50»* или *«2.5 евро»*), и я автоматически сохраню его в каталог!\n\n"
+        f"_(Или нажмите кнопку «Пропустить» ниже)_"
+    )
+    markup = {
+        "inline_keyboard": [
+            [{"text": "❌ Пропустить добавление цены", "callback_data": "skip_pending_product"}]
+        ]
+    }
+    return msg, markup
+

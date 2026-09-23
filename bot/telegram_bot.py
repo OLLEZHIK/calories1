@@ -1,7 +1,9 @@
 import os
 import sys
+import json
 import logging
 from pathlib import Path
+from typing import Dict, Any, Optional
 
 # Ensure project root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -27,6 +29,12 @@ def process_user_meal_input(raw_text: str, input_type: str = "text", image_bytes
     """Routes input through TeamLeadAgent (auto intent detection)."""
     from agents.teamlead_agent import teamlead_agent
     return teamlead_agent.route_input(raw_text, input_type=input_type, image_bytes=image_bytes)
+
+
+def process_user_meal_input_with_details(raw_text: str, input_type: str = "text", image_bytes: bytes = None) -> Dict[str, Any]:
+    """Routes input through TeamLeadAgent and returns details including any pending product."""
+    from agents.teamlead_agent import teamlead_agent
+    return teamlead_agent.route_input_with_details(raw_text, input_type=input_type, image_bytes=image_bytes)
 
 
 def process_task_input(raw_text: str) -> str:
@@ -155,11 +163,71 @@ def start_bot():
                 set_mode(context, None)
                 await query.answer("Отменено")
                 await query.edit_message_text("❌ Операция очистки записей отменена.", parse_mode="Markdown")
+            elif data == "skip_pending_product":
+                set_mode(context, None)
+                await query.answer("Пропущено")
+                await query.edit_message_text("❌ Добавление цены продукта пропущено.", parse_mode="Markdown")
 
         # ── Text handler ──────────────────────────────────────────────────
         async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (update.message.text or "").strip()
             mode = get_mode(context)
+
+            # Check if user is entering a price for an unknown product
+            if mode and mode.startswith("await_product_price:"):
+                from agents.ingestion_agent import parse_entered_price
+                from database.db import save_custom_product, save_product_price
+
+                if text.lower() in ["отмена", "пропустить", "skip", "нет", "/cancel"]:
+                    set_mode(context, None)
+                    await update.message.reply_markdown("❌ Добавление цены продукта отменено.", reply_markup=main_keyboard)
+                    return
+
+                price = parse_entered_price(text)
+                if price is not None:
+                    try:
+                        prod_data = json.loads(mode[len("await_product_price:"):])
+                        p_name = prod_data["product_name"]
+                        cal = float(prod_data.get("calories_100g") or 0.0)
+                        p = float(prod_data.get("protein_100g") or 0.0)
+                        f = float(prod_data.get("fat_100g") or 0.0)
+                        c = float(prod_data.get("carbs_100g") or 0.0)
+                        w = float(prod_data.get("weight_g") or 100.0)
+                        cat = prod_data.get("category") or "general"
+                        score = int(prod_data.get("coach_score") or 6)
+                        verdict = prod_data.get("coach_verdict") or ""
+
+                        save_custom_product(p_name, cal, p, f, c)
+                        save_product_price(p_name, price, w, cat, p, f, c, cal, score, verdict, user_id=1)
+                        set_mode(context, None)
+
+                        p_100 = round((price / w) * 100, 2) if w > 0 else price
+                        await update.message.reply_markdown(
+                            f"✅ **Продукт «{p_name.capitalize()}» успешно добавлен в базу и каталог!**\n\n"
+                            f"💰 Цена: **{price:.2f} €** ({p_100:.2f} € за 100г)\n"
+                            f"📊 КБЖУ (на 100г): {int(round(cal))} ккал | Б:{p}г | Ж:{f}г | У:{c}г\n\n"
+                            f"🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)",
+                            reply_markup=main_keyboard
+                        )
+                        return
+                    except Exception as e:
+                        logger.error(f"Error saving pending product price: {e}")
+
+                if not text.startswith("/") and text not in [
+                    "🍲 Запись приема пищи", "➕ Добавить продукт", "📊 Итоги за сегодня",
+                    "💡 Советы ИИ-тренера", "📋 Список продуктов", "🗑 Очистить записи", "👨‍💼 Технический таск"
+                ]:
+                    await update.message.reply_markdown(
+                        "⚠️ **Пожалуйста, введите цену числом** (например: *«2.50»* или *«2.5 евро»*) или нажмите кнопку «Пропустить».",
+                        reply_markup=to_inline_markup({
+                            "inline_keyboard": [
+                                [{"text": "❌ Пропустить добавление цены", "callback_data": "skip_pending_product"}]
+                            ]
+                        })
+                    )
+                    return
+                else:
+                    set_mode(context, None)
 
             # Button: enter food mode
             if text in ("🍲 Запись приема пищи", "/food"):
@@ -245,17 +313,21 @@ def start_bot():
             if mode == MODE_ADD_PRODUCT:
                 set_mode(context, None)
                 response = process_add_product(raw_text=text)
+                await update.message.reply_markdown(response, reply_markup=main_keyboard)
             elif mode == MODE_TASK:
                 set_mode(context, None)
                 response = process_task_input(text)
-            elif mode == MODE_FOOD:
-                set_mode(context, None)
-                response = process_user_meal_input(text, input_type="text")
+                await update.message.reply_markdown(response, reply_markup=main_keyboard)
             else:
-                # No mode — auto detect intent
-                response = process_user_meal_input(text, input_type="text")
-
-            await update.message.reply_markdown(response, reply_markup=main_keyboard)
+                set_mode(context, None)
+                res_det = process_user_meal_input_with_details(text, input_type="text")
+                await update.message.reply_markdown(res_det["response"], reply_markup=main_keyboard)
+                pending = res_det.get("pending_product")
+                if pending:
+                    set_mode(context, f"await_product_price:{json.dumps(pending, ensure_ascii=False)}")
+                    from agents.ingestion_agent import format_new_product_prompt
+                    p_text, p_markup = format_new_product_prompt(pending)
+                    await update.message.reply_markdown(p_text, reply_markup=to_inline_markup(p_markup))
 
         # ── Voice handler ─────────────────────────────────────────────────
         async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -280,24 +352,29 @@ def start_bot():
                     if mode == MODE_ADD_PRODUCT:
                         set_mode(context, None)
                         reply = header + process_add_product(raw_text=transcription)
+                        await update.message.reply_markdown(reply, reply_markup=main_keyboard)
                     elif mode == MODE_TASK:
-                        # Voice after "Технический таск" → direct to TeamLead
                         set_mode(context, None)
                         reply = header + process_task_input(transcription)
-                    elif mode == MODE_FOOD:
-                        set_mode(context, None)
-                        reply = header + process_user_meal_input(transcription, input_type="voice")
+                        await update.message.reply_markdown(reply, reply_markup=main_keyboard)
                     else:
-                        # Auto detect
-                        reply = header + process_user_meal_input(transcription, input_type="voice")
+                        set_mode(context, None)
+                        res_det = process_user_meal_input_with_details(transcription, input_type="voice")
+                        reply = header + res_det["response"]
+                        await update.message.reply_markdown(reply, reply_markup=main_keyboard)
+                        pending = res_det.get("pending_product")
+                        if pending:
+                            set_mode(context, f"await_product_price:{json.dumps(pending, ensure_ascii=False)}")
+                            from agents.ingestion_agent import format_new_product_prompt
+                            p_text, p_markup = format_new_product_prompt(pending)
+                            await update.message.reply_markdown(p_text, reply_markup=to_inline_markup(p_markup))
                 else:
                     set_mode(context, None)
                     reply = (
                         f"⚠️ **Ошибка расшифровки голоса**:\n`{err}`\n\n"
                         "Попробуйте отправить текстом или проверьте GROQ_API_KEY в `.env`."
                     )
-
-                await update.message.reply_markdown(reply, reply_markup=main_keyboard)
+                    await update.message.reply_markdown(reply, reply_markup=main_keyboard)
             except Exception as e:
                 logger.error(f"Voice error: {e}")
                 await update.message.reply_text(f"⚠️ Ошибка при обработке аудио: {e}")
@@ -316,8 +393,15 @@ def start_bot():
                     response = process_add_product(raw_text=caption, image_bytes=image_bytes)
                     await update.message.reply_markdown(response, reply_markup=main_keyboard)
                 else:
-                    response = process_user_meal_input(caption, input_type="photo", image_bytes=image_bytes)
-                    await update.message.reply_markdown(f"📷 **Фото блюда обработано!**\n\n{response}", reply_markup=main_keyboard)
+                    set_mode(context, None)
+                    res_det = process_user_meal_input_with_details(caption, input_type="photo", image_bytes=image_bytes)
+                    await update.message.reply_markdown(f"📷 **Фото блюда обработано!**\n\n{res_det['response']}", reply_markup=main_keyboard)
+                    pending = res_det.get("pending_product")
+                    if pending:
+                        set_mode(context, f"await_product_price:{json.dumps(pending, ensure_ascii=False)}")
+                        from agents.ingestion_agent import format_new_product_prompt
+                        p_text, p_markup = format_new_product_prompt(pending)
+                        await update.message.reply_markdown(p_text, reply_markup=to_inline_markup(p_markup))
             except Exception as e:
                 logger.error(f"Photo error: {e}")
                 await update.message.reply_text(f"⚠️ Ошибка при обработке фото: {e}")
