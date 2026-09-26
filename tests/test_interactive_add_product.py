@@ -9,6 +9,7 @@ if hasattr(sys.stdout, 'reconfigure'):
 from agents.ingestion_agent import (
     fetch_internet_product_nutrition,
     parse_entered_price,
+    parse_entered_price_and_weight,
     format_new_product_prompt
 )
 from agents.teamlead_agent import teamlead_agent
@@ -19,14 +20,30 @@ def test_interactive_flow():
     print("=== Testing Interactive Add Product Feature ===")
 
     # 1. Test price parser
-    print("\n1. Testing parse_entered_price...")
+    print("\n1. Testing parse_entered_price and parse_entered_price_and_weight...")
     assert parse_entered_price("2.50") == 2.50
     assert parse_entered_price("2,5 евро") == 2.50
     assert parse_entered_price("3€") == 3.0
     assert parse_entered_price("200 руб") == 2.0  # converted from 200 RUB
     assert parse_entered_price("отмена") is None
     assert parse_entered_price("пропустить") is None
-    print("✓ Price parser tests passed!")
+
+    p1, w1 = parse_entered_price_and_weight("40 центов - 1 килограмм", default_weight_g=150.0)
+    assert p1 == 0.40
+    assert w1 == 1000.0
+
+    p2, w2 = parse_entered_price_and_weight("1 евро 50 центов", default_weight_g=100.0)
+    assert p2 == 1.50
+    assert w2 == 100.0
+
+    p3, w3 = parse_entered_price_and_weight("80 ct / 500г", default_weight_g=100.0)
+    assert p3 == 0.80
+    assert w3 == 500.0
+
+    p4, w4 = parse_entered_price_and_weight("2.40 € за 400 грамм", default_weight_g=100.0)
+    assert p4 == 2.40
+    assert w4 == 400.0
+    print("✓ Price and weight parser tests passed!")
 
     # 2. Test internet nutrition retrieval for a new product
     test_prod = "сыр сулугуни тест"

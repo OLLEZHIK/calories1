@@ -758,31 +758,90 @@ Return ONLY a valid JSON object:
     }
 
 
-def parse_entered_price(text: str) -> Optional[float]:
+def parse_entered_price_and_weight(text: str, default_weight_g: float = 100.0) -> Tuple[Optional[float], float]:
     """
-    Extracts numeric price from user response like '2.50', '2,5 евро', '150 руб', '3€', etc.
-    Returns float or None if cancelled/invalid.
+    Extracts numeric price and packaging/portion weight from user response like:
+    - '40 центов - 1 килограмм' -> (0.40, 1000.0)
+    - '40 центов' -> (0.40, default_weight_g)
+    - '80 центов за килограмм' -> (0.80, 1000.0)
+    - '1.20 за 500г' -> (1.20, 500.0)
+    - '1 евро 50 центов' -> (1.50, default_weight_g)
+    - '2.50 €' -> (2.50, default_weight_g)
+    - '200 руб' -> (2.00, default_weight_g)
+    Returns (price_in_eur, weight_g).
     """
     t = text.strip().lower()
     if any(w in t for w in ["отмена", "отменить", "пропустить", "skip", "не надо", "нет"]):
-        return None
+        return None, default_weight_g
 
-    # Handle rubles: e.g. "200 руб", "150 рублей", "200р" -> convert roughly to EUR (~100 RUB = 1 EUR)
-    m_rub = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:руб|р\b)', t)
+    weight_g = default_weight_g
+
+    # 1. Extract weight if mentioned by user
+    m_kg_word = re.search(r'(?:за\s+)?(?:килограмм(?:а|ов)?|кило|кг)\b', t)
+    m_kg_num = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:кг|килограмм(?:а|ов)?|кило|kg)\b', t)
+    if m_kg_num:
+        weight_g = float(m_kg_num.group(1).replace(",", ".")) * 1000.0
+        t_price = t[:m_kg_num.start()] + " " + t[m_kg_num.end():]
+    elif m_kg_word:
+        weight_g = 1000.0
+        t_price = t[:m_kg_word.start()] + " " + t[m_kg_word.end():]
+    else:
+        m_g = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:г|гр|грамм(?:а|ов)?|g)\b', t)
+        if m_g:
+            weight_g = float(m_g.group(1).replace(",", "."))
+            t_price = t[:m_g.start()] + " " + t[m_g.end():]
+        else:
+            t_price = t
+
+    # 2. Extract price
+    # Combined euro + cents: e.g. "1 евро 50 центов", "2€ 30c"
+    m_combo = re.search(r'(\d+)\s*(?:евро|eur|€)\s*(\d+)\s*(?:цент(?:а|ов)?|ct|c)?\b', t_price)
+    if m_combo:
+        eur_part = float(m_combo.group(1))
+        cents_part = float(m_combo.group(2))
+        price = round(eur_part + (cents_part / 100.0), 2)
+        return price, weight_g
+
+    # Cents only: e.g. "40 центов", "50 цент", "80 cents", "40ct"
+    m_cents = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:цент(?:а|ов)?|cents?|ct)\b', t_price)
+    if m_cents:
+        cents_val = float(m_cents.group(1).replace(",", "."))
+        price = round(cents_val / 100.0, 2)
+        return price, weight_g
+
+    # Kopecks: e.g. "50 копеек", "40 коп"
+    m_kop = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:коп(?:еек|ейки|ейка)?)\b', t_price)
+    if m_kop:
+        kop_val = float(m_kop.group(1).replace(",", "."))
+        rub_val = kop_val / 100.0
+        price = round(max(0.01, rub_val / 100.0), 2)
+        return price, weight_g
+
+    # Rubles: e.g. "200 руб", "150 рублей", "200р" -> convert roughly to EUR (~100 RUB = 1 EUR)
+    m_rub = re.search(r'(\d+(?:[.,]\d+)?)\s*(?:руб|р\b)', t_price)
     if m_rub:
         rub_val = float(m_rub.group(1).replace(",", "."))
-        return round(max(0.01, rub_val / 100.0), 2)
+        price = round(max(0.01, rub_val / 100.0), 2)
+        return price, weight_g
 
-    # Check standard euro or naked number: e.g. "2.5", "2,50", "2.50 €", "2.5 евро", "€2.5"
-    m = re.search(r'(\d+(?:[.,]\d+)?)', t)
-    if m:
+    # Standard euro or naked number: e.g. "2.5", "2,50", "2.50 €", "2.5 евро", "€2.5"
+    m_num = re.search(r'(\d+(?:[.,]\d+)?)', t_price)
+    if m_num:
         try:
-            val = float(m.group(1).replace(",", "."))
+            val = float(m_num.group(1).replace(",", "."))
             if val > 0:
-                return round(val, 2)
+                price = round(val, 2)
+                return price, weight_g
         except ValueError:
             pass
-    return None
+
+    return None, weight_g
+
+
+def parse_entered_price(text: str) -> Optional[float]:
+    """Extracts numeric price in EUR from user response."""
+    price, _ = parse_entered_price_and_weight(text)
+    return price
 
 
 def format_new_product_prompt(product_info: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:

@@ -175,7 +175,7 @@ def start_bot():
 
             # Check if user is entering a price for an unknown product
             if mode and mode.startswith("await_product_price:"):
-                from agents.ingestion_agent import parse_entered_price
+                from agents.ingestion_agent import parse_entered_price_and_weight
                 from database.db import save_custom_product, save_product_price
 
                 if text.lower() in ["отмена", "пропустить", "skip", "нет", "/cancel"]:
@@ -183,16 +183,17 @@ def start_bot():
                     await update.message.reply_markdown("❌ Добавление цены продукта отменено.", reply_markup=main_keyboard)
                     return
 
-                price = parse_entered_price(text)
+                prod_data = json.loads(mode[len("await_product_price:"):])
+                w_default = float(prod_data.get("weight_g") or 100.0)
+                price, w_parsed = parse_entered_price_and_weight(text, default_weight_g=w_default)
                 if price is not None:
                     try:
-                        prod_data = json.loads(mode[len("await_product_price:"):])
                         p_name = prod_data["product_name"]
                         cal = float(prod_data.get("calories_100g") or 0.0)
                         p = float(prod_data.get("protein_100g") or 0.0)
                         f = float(prod_data.get("fat_100g") or 0.0)
                         c = float(prod_data.get("carbs_100g") or 0.0)
-                        w = float(prod_data.get("weight_g") or 100.0)
+                        w = w_parsed if w_parsed > 0 else w_default
                         cat = prod_data.get("category") or "general"
                         score = int(prod_data.get("coach_score") or 6)
                         verdict = prod_data.get("coach_verdict") or ""
@@ -202,9 +203,10 @@ def start_bot():
                         set_mode(context, None)
 
                         p_100 = round((price / w) * 100, 2) if w > 0 else price
+                        w_str = f" за {int(w)}г" if w != 100 else " за 100г"
                         await update.message.reply_markdown(
                             f"✅ **Продукт «{p_name.capitalize()}» успешно добавлен в базу и каталог!**\n\n"
-                            f"💰 Цена: **{price:.2f} €** ({p_100:.2f} € за 100г)\n"
+                            f"💰 Цена: **{price:.2f} €**{w_str} ({p_100:.2f} € за 100г)\n"
                             f"📊 КБЖУ (на 100г): {int(round(cal))} ккал | Б:{p}г | Ж:{f}г | У:{c}г\n\n"
                             f"🌐 [Открыть Дашборд Vercel](https://fatcaunter.vercel.app)",
                             reply_markup=main_keyboard

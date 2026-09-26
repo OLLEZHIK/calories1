@@ -248,6 +248,18 @@ def are_product_duplicates(name1: str, name2: str) -> bool:
     if is_pork1 and is_pork2:
         return True
 
+    # Domain canonical matching: potato (картофель <-> картошка)
+    is_pot1 = ("картоф" in n1 or "картош" in n1)
+    is_pot2 = ("картоф" in n2 or "картош" in n2)
+    if is_pot1 and is_pot2:
+        return True
+
+    # Domain canonical matching: egg (яйцо <-> яйца <-> куриное яйцо)
+    is_egg1 = ("яйц" in n1)
+    is_egg2 = ("яйц" in n2)
+    if is_egg1 and is_egg2:
+        return True
+
     toks1 = sorted([stem_product_word(t) for t in re.sub(r'[^\w\s%]', ' ', n1).split() if len(t) > 1])
     toks2 = sorted([stem_product_word(t) for t in re.sub(r'[^\w\s%]', ' ', n2).split() if len(t) > 1])
     if toks1 and toks2 and toks1 == toks2:
